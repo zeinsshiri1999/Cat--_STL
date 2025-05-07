@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/root/cpp_dir/Cat++_STL/build",
+  "command": "/usr/bin/clang++ -I/root/cpp_dir/Cat++_STL/build -g -std=gnu++20 -Wall -Wextra -Wshadow -Wformat=2 -Wunused -g -O0 -o CMakeFiles/Cat++STL.dir/src/test.cpp.o -c /root/cpp_dir/Cat++_STL/src/test.cpp",
+  "file": "/root/cpp_dir/Cat++_STL/src/test.cpp",
+  "output": "CMakeFiles/Cat++STL.dir/src/test.cpp.o"
+}
+]

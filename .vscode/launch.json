@@ -1,0 +1,29 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",                          // 调试器类型
+            "request": "launch",                     //调试器启动方式：launch — 启动并调试新进程；attach — 调试已运行进程
+            "name": "Debug_launch",                  // 调试配置名
+            "program": "${workspaceFolder}/build/Cat++STL", // 调试的可执行文件路径
+            "args": [],                              // 调试参数
+            "cwd": "${workspaceFolder}",             // 工作目录
+            "preLaunchTask": "build",                // 指定调试前执行的task任务
+            "internalConsoleOptions": "neverOpen",   // 不切换到调试控制台, 在终端调试
+            "console": "integratedTerminal",         // 使用集成终端调试
+            "stopOnEntry": false,                    // 是否在入口处停止
+        },
+        {
+            "type": "lldb",                          // 调试器类型
+            "request": "attach",                     //调试器启动方式：launch — 启动并调试新进程；attach — 调试已运行进程
+            "name": "Debug_attach",                  // 调试配置名
+            "program": "${workspaceFolder}/build/${fileBasenameNoExtension}", // 调试的可执行文件路径
+            "preLaunchTask": "run",                // 指定调试前执行的task任务
+            "internalConsoleOptions": "neverOpen",   // 不切换到调试控制台, 在终端调试
+            "stopOnEntry": false,                    // 是否在入口处停止
+        },
+    ]
+}

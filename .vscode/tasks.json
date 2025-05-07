@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "cmake --build build",
+            "group": "test"
+        },
+        {
+            "label": "run",
+            "type": "shell",
+            "command": "./build/Cat++STL",
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Runs the main project executable"
+        },
+        {
+            "label": "clean",
+            "type": "shell",
+            "command": "rm -rf build",
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Removes the entire build directory"
+        },
+        {
+            "label": "Config CMake (clang, Ninja, vcpkg)",
+            "type": "shell",
+            "command": "cmake -B build -S . -G \"Ninja\" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-linux -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+            "group": "build",
+            "problemMatcher": [],
+            "options": {
+                "env": {
+                    "VCPKG_ROOT": "/root/vcpkg"
+                }
+            }
+        }
+    ]
+}
