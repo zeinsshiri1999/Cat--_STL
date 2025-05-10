@@ -50,18 +50,18 @@ private:
     static inline free_list_node* free_serial[NUM_OF_NODES] = {nullptr}; // 空闲链表数组
 
 public:
-    // 配置访问接口
+    // pool配置访问接口
     static constexpr size_t get_align() { return ALIGN; }
     static constexpr size_t get_max_bytes() { return MAX_BYTES; }
     static constexpr size_t get_num_of_nodes() { return NUM_OF_NODES; }
 
-    // 内存池状态访问接口
+    // pool状态访问接口
     static char* get_start() { return start; }
     static void set_start(char* ptr) { start = ptr; }
     static char* get_end() { return end; }
     static void set_end(char* ptr) { end = ptr; }
     static size_t get_size() { return size; }
-    static void set_size(size_t size) { size = size; }
+    static void set_size(size_t new_size) { size = new_size; }
     
     // 空闲链表操作接口
     static free_list_node* get_free_list(size_t index) { return free_serial[index]; }
@@ -76,7 +76,7 @@ using pool_f = alloc_pool<false>;  // 非线程安全版本
 template<bool threads, typename T>
 class pool_allocator : public allocator<threads, T> {
 private:
-    // 内存池管理方法
+    // 内存池访问别名
     using pool = typename std::conditional<threads, pool_t, pool_f>::type;
     
     /*
@@ -115,7 +115,6 @@ private:
     char* chunk_alloc(size_t node_size, unsigned int& nodes);
 
 public:
-    // 模板构造函数，允许从其他类型的allocator构造
     template<typename U>
     struct rebind {
         using other = pool_allocator<threads, U>;
@@ -131,16 +130,24 @@ public:
     // 内存分配：优先使用内存池，大块内存直接使用malloc
     T* allocate(size_t n) override {
         if(n * sizeof(T) > pool::get_max_bytes()) {
-            return static_cast<T*>(malloc(n * sizeof(T)));
+            T* result = static_cast<T*>(malloc(n * sizeof(T)));
+            if (!result) {
+                throw std::bad_alloc();
+            }
+            return result;
         }
 
         free_list_node* block = pool::get_free_list(get_free_serial_index(n * sizeof(T)));
         if(block) {
             pool::set_free_list(get_free_serial_index(n * sizeof(T)), block->block);
-            return static_cast<T*>(block);
+            return reinterpret_cast<T*>(block);
         }
 
-        return static_cast<T*>(refill(round_up(n * sizeof(T))));
+        void* result = refill(round_up(n * sizeof(T)));
+        if (!result) {
+            throw std::bad_alloc();
+        }
+        return static_cast<T*>(result);
     }
 
     // 内存释放：优先使用内存池，大块内存直接使用free
@@ -152,8 +159,8 @@ public:
         
         if(ptr) {
             free_list_node* my_free_list = pool::get_free_list(get_free_serial_index(n * sizeof(T)));
-            ((free_list_node*)ptr)->block = my_free_list;
-            pool::set_free_list(get_free_serial_index(n * sizeof(T)), (free_list_node*)ptr);
+            reinterpret_cast<free_list_node*>(ptr)->block = my_free_list;
+            pool::set_free_list(get_free_serial_index(n * sizeof(T)), reinterpret_cast<free_list_node*>(ptr));
         }
     }
 
@@ -183,32 +190,41 @@ template<bool threads, typename T>
 void* pool_allocator<threads, T>::refill(size_t node_size, const size_t& nodes) {
     unsigned int nobjs = nodes;
     char* chunk = chunk_alloc(node_size, nobjs);
-    if(nobjs == 1)
-        return chunk;
-
-    free_list_node* my_free_list = pool::get_free_list(get_free_serial_index(node_size));
-    my_free_list->block = (free_list_node*)chunk;
-
-    free_list_node* current_node = (free_list_node*)((char*)chunk + node_size);
-    free_list_node* next_node = (free_list_node*)((char*)current_node + node_size);
-    if(next_node > (free_list_node*)((char*)pool::get_end()-node_size)) {
+    if (!chunk) {
+        return nullptr;
+    }
+    
+    if(nobjs == 1) {
         return chunk;
     }
 
-    for(int i = 1; i < nobjs - 1; i++) {
+    free_list_node* my_free_list = pool::get_free_list(get_free_serial_index(node_size));
+    if (!my_free_list) {
+        return chunk;
+    }
+
+    my_free_list->block = reinterpret_cast<free_list_node*>(chunk);
+
+    free_list_node* current_node = reinterpret_cast<free_list_node*>(chunk + node_size);
+    free_list_node* next_node = reinterpret_cast<free_list_node*>(reinterpret_cast<char*>(current_node) + node_size);
+    if(next_node > reinterpret_cast<free_list_node*>(pool::get_end()-node_size)) {
+        return chunk;
+    }
+
+    for(unsigned int i = 1; i < nobjs - 1; i++) {
         current_node->block = next_node;
         if(i == nobjs - 2) {
             next_node->block = nullptr;
             break;
         }
 
-        if((free_list_node*)((char*)next_node + node_size) > (free_list_node*)((char*)pool::get_end()-node_size)) {
+        if(reinterpret_cast<free_list_node*>(reinterpret_cast<char*>(next_node) + node_size) > reinterpret_cast<free_list_node*>(pool::get_end()-node_size)) {
             next_node->block = nullptr;
             break;
         }
 
         current_node = next_node;
-        next_node = (free_list_node*)((char*)next_node + node_size);
+        next_node = reinterpret_cast<free_list_node*>(reinterpret_cast<char*>(next_node) + node_size);
     }
     return chunk;
 }
@@ -235,28 +251,39 @@ char* pool_allocator<threads, T>::chunk_alloc(size_t node_size, unsigned int& no
 
         if(bytes_left > 0) {
             free_list_node* my_free_list = pool::get_free_list(get_free_serial_index(bytes_left));
-            ((free_list_node*)pool::get_start())->block = my_free_list;
-            pool::set_free_list(get_free_serial_index(bytes_left), (free_list_node*)pool::get_start());
+            if (my_free_list) {
+                reinterpret_cast<free_list_node*>(pool::get_start())->block = my_free_list;
+                pool::set_free_list(get_free_serial_index(bytes_left), reinterpret_cast<free_list_node*>(pool::get_start()));
+            }
         }
 
-        pool::set_start((char*)malloc(bytes_to_get));
+        pool::set_start(static_cast<char*>(malloc(bytes_to_get)));
         if(!pool::get_start()) {
-            for(int i = node_size; i < pool::get_num_of_nodes(); i++) {
+            // 尝试从其他空闲链表中获取内存
+            for(size_t i = node_size; i < pool::get_num_of_nodes(); i++) {
                 if(pool::get_free_list(i)) {
                     pool::set_free_list(i, pool::get_free_list(i)->block);
-                    pool::set_start((char*)pool::get_free_list(i));
+                    pool::set_start(reinterpret_cast<char*>(pool::get_free_list(i)));
                     pool::set_end(pool::get_start() + node_size);
                     return chunk_alloc(node_size, nodes);
                 }
             }
-            return nullptr;
+            return nullptr;  // 所有尝试都失败
         }
 
-        pool::set_size(pool::get_size() + bytes_to_get);
         pool::set_end(pool::get_start() + bytes_to_get);
+        pool::set_size(bytes_to_get);
         return chunk_alloc(node_size, nodes);
     }
 }
+
+// 显式实例化
+template class pool_allocator<true, int>;
+template class pool_allocator<false, int>;
+
+// 显式实例化非模板类
+template class alloc_pool<true>;
+template class alloc_pool<false>;
 
 } // namespace Cat
 

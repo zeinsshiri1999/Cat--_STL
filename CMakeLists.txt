@@ -56,9 +56,9 @@ file(GLOB_RECURSE SRC_FILES
 #=============================================================================
 # 主库目标
 #=============================================================================
-add_library(${CMAKE_PROJECT_NAME} ${SRC_FILES} ${HEAD_FILES})
-target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/src)
-target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE 
+add_library(${CMAKE_PROJECT_NAME} INTERFACE)
+target_include_directories(${CMAKE_PROJECT_NAME} INTERFACE ${PROJECT_SOURCE_DIR}/src)
+target_compile_options(${CMAKE_PROJECT_NAME} INTERFACE 
     ${COMMON_COMPILE_OPTIONS}
     ${DEBUG_COMPILE_OPTIONS}
     ${RELEASE_COMPILE_OPTIONS}
@@ -69,7 +69,7 @@ target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
 #=============================================================================
 # 如果util下有本地依赖库，可以用add_subdirectory(util/xxx)
 # 例如:
-# add_subdirectory(util/my_local_lib)
+add_subdirectory(util/dev_dependency/Cat++_test)
 # target_link_libraries(CatppSTL PUBLIC my_local_lib)
 
 #=============================================================================
@@ -85,10 +85,11 @@ target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
 file(GLOB_RECURSE TEST_SOURCES "${PROJECT_SOURCE_DIR}/test/*.cpp")
 add_executable(test_alloc ${TEST_SOURCES})
 
-target_link_libraries(test_alloc PRIVATE ${CMAKE_PROJECT_NAME})
+target_link_libraries(test_alloc PRIVATE ${CMAKE_PROJECT_NAME} Cat++_test)
 target_include_directories(test_alloc PRIVATE
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/util
+    ${PROJECT_SOURCE_DIR}/util/dev_dependency/Cat++_test/src
 )
 
 target_compile_options(test_alloc PRIVATE
@@ -119,7 +120,7 @@ endif()
 # 将.in文件中的变量替换为值，输出到.h文件
 configure_file(${CMAKE_CONFIG_IN_FILE} ${CMAKE_CONFIG_H_FILE})
 # 添加配置头文件目录到包含路径，让C++可搜索build文件夹下的头文件CmakeConfig.h
-target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC ${PROJECT_BINARY_DIR})
+target_include_directories(${CMAKE_PROJECT_NAME} INTERFACE ${PROJECT_BINARY_DIR})
 
 #=============================================================================
 # 备注
