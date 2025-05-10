@@ -1,159 +1,203 @@
 #pragma once
-#include"Cat++_alloc.h"
+#include "Cat++_allocator.h"
+#include <cstdlib>
+#include <cstring>
+//线程安全
+//尽量兼容STL接口规范
+//异常处理
+/*
+内存池化:
+1）减少内存碎片
+2）避免频繁分配时的系统调用开销
+3）提高内存利用率：malloc头部有一块小内存，用于管理分配的内存，在大量分配小内存时，会造成内存浪费
+*/
 
+//直觉思路是模8+1：(bytes % __ALIGN == 0) ? bytes : (bytes / __ALIGN + 1) * __ALIGN
+//(bytes + __ALIGN - 1) & ~(__ALIGN - 1)
+//__ALIGN - 1低位都是1，~(__ALIGN - 1)为低位清零掩码
+//需求：bytes 未对齐，输入bytes = k * __ALIGN + remainder；输出(k+1) * __ALIGN
+//需求：bytes 对齐，输入bytes = k * __ALIGN；输出k * __ALIGN
+
+namespace Cat {
+
+// 内存池节点
 union free_list_node {
     free_list_node* block;      // 当块空闲时，作为指针类型指向下一个空闲块
     char client_data[1];        // 当块分配出去时，作为一个灵活数组类型供用户使用
 };
 
-//内存池配置
-enum {ALIGN = 8};                       // 最小分配单元
-enum {MAX_BYTES = 128};                 // 小块大小上限
-enum {NUM_OF_NODES = MAX_BYTES / ALIGN};// 空闲数组节点数量(128/8)
-
-namespace Cat {
-
-template<bool threads, typename T>
-class pool_allocator : public allocator<threads, T>{
-public:
-    //类型定义
-    typedef T        value_type;
-    typedef T*       pointer;
-    typedef const T* const_pointer;
-    typedef T&       reference;
-    typedef const T& const_reference;
-    //这样才能使用基类定义的类型
-    using execption_handler = typename allocator<threads, T>::execption_handler;
-    //构造函数
-    pool_allocator() = delete;
-    //禁止拷贝和赋值
-    pool_allocator(const pool_allocator& other) = delete;
-    pool_allocator(pool_allocator&& other) = delete;
-    pool_allocator& operator=(const pool_allocator& other) = delete;
-    pool_allocator& operator=(pool_allocator&& other) = delete;
-
+template<bool threads>
+class alloc_pool final {
 private:
-    //内存池状态
-    static inline char* start = nullptr;
-    static inline char* end = nullptr;
-    static inline size_t pool_size = 0;
+    // 禁止实例化、拷贝和移动
+    alloc_pool() = delete;
+    ~alloc_pool() = delete;
+    alloc_pool(const alloc_pool&) = delete;
+    alloc_pool& operator=(const alloc_pool&) = delete;
+    alloc_pool(alloc_pool&&) = delete;
+    alloc_pool& operator=(alloc_pool&&) = delete;
 
-    static inline free_list_node* free_serial[NUM_OF_NODES] = {nullptr};
+    // 内存池配置
+    static constexpr size_t ALIGN = 8;                       // 最小分配单元
+    static constexpr size_t MAX_BYTES = 128;                 // 小块大小上限
+    static constexpr size_t NUM_OF_NODES = MAX_BYTES / ALIGN;// 空闲数组节点数量(128/8)
 
-private:
-    /*需求：获取对应free_serial_index
-    bytes 未对齐，输入bytes = k * __ALIGN + remainder；输出(k+1) -1
-    bytes 对齐，输入bytes = k * __ALIGN；输出k -1
-    */
-    static size_t get_free_serial_index(size_t bytes){
-        return (bytes + ALIGN - 1) / ALIGN - 1;
-    }
-
-    /*需求：向上取整
-    bytes 未对齐，输入bytes = k * __ALIGN + remainder；输出(k+1) * __ALIGN
-    bytes 对齐，输入bytes = k * __ALIGN；输出k * __ALIGN
-    */
-    static size_t round_up(size_t bytes){
-        return (bytes + ALIGN - 1) & ~(ALIGN - 1);
-    }
-    //内存池管理方法
-    static void* refill(size_t node_size, const size_t& nodes = 20, const execption_handler handler = nullptr);
-    static char* chunk_alloc(size_t node_size, unsigned int& nodes, const execption_handler handler = nullptr);
+    // 内存池状态
+    static inline char* start = nullptr;                     // 内存池起始位置
+    static inline char* end = nullptr;                       // 内存池结束位置
+    static inline size_t pool_size = 0;                      // 内存池大小
+    static inline free_list_node* free_serial[NUM_OF_NODES] = {nullptr}; // 空闲链表数组
 
 public:
-    static void* allocate(size_t n, const execption_handler handler = nullptr);
-    static void* reallocate(T* ptr, size_t old_size, size_t new_size);
-    static void deallocate(T* ptr);
-    static void construct(T* ptr, const T& value);
-    static void destroy(T* ptr);
+    // 配置访问接口
+    static constexpr size_t get_align() { return ALIGN; }
+    static constexpr size_t get_max_bytes() { return MAX_BYTES; }
+    static constexpr size_t get_num_of_nodes() { return NUM_OF_NODES; }
+
+    // 内存池状态访问接口
+    static char* get_start() { return start; }
+    static void set_start(char* ptr) { start = ptr; }
+    static char* get_end() { return end; }
+    static void set_end(char* ptr) { end = ptr; }
+    static size_t get_pool_size() { return pool_size; }
+    static void set_pool_size(size_t size) { pool_size = size; }
+    
+    // 空闲链表操作接口
+    static free_list_node* get_free_list(size_t index) { return free_serial[index]; }
+    static void set_free_list(size_t index, free_list_node* node) { free_serial[index] = node; }
 };
 
-/*  从内存池分出一批块的连续内存
-1)先消费现有内存池
-2)若不足，把零碎余量挂到对应链表，然后向系统 malloc 大块来扩容
-3)若系统 malloc 失败，尝试从稍大等级的 free_list "借"一块；若依然失败，则退回一级配置器
-*/
+// 内存池分配器类
 template<bool threads, typename T>
-char* pool_allocator<threads, T>::chunk_alloc(size_t node_size, unsigned int& nodes, const execption_handler handler){
-    char* result;
-    size_t need_bytes = node_size * nodes;
-    size_t bytes_left = end - start;//计算相差几个char
+class pool_allocator : public allocator<threads, T> {
+private:
+    alloc_pool<threads> entity;
 
-    if(bytes_left >= need_bytes){
-        result = start;
-        start += need_bytes;//偏移了几个元素
+    // 内存池管理方法
+    /*
+     * 内存对齐计算：
+     * 1. 未对齐情况：bytes = k * ALIGN + remainder
+     *    计算：(bytes + ALIGN - 1) / ALIGN - 1
+     *    结果：k
+     * 2. 已对齐情况：bytes = k * ALIGN
+     *    计算：(bytes + ALIGN - 1) / ALIGN - 1
+     *    结果：k - 1
+     */
+    size_t get_free_serial_index(size_t bytes) const {
+        return (bytes + entity.get_align() - 1) / entity.get_align() - 1;
+    }
+
+    /*
+     * 内存对齐计算：
+     * 1. 未对齐情况：bytes = k * ALIGN + remainder
+     *    计算：(bytes + ALIGN - 1) & ~(ALIGN - 1)
+     *    结果：(k + 1) * ALIGN
+     * 2. 已对齐情况：bytes = k * ALIGN
+     *    计算：(bytes + ALIGN - 1) & ~(ALIGN - 1)
+     *    结果：k * ALIGN
+     * 
+     * 原理：
+     * - ALIGN - 1 的低位都是1
+     * - ~(ALIGN - 1) 是低位清零掩码
+     * - 通过位运算实现向上取整到ALIGN的倍数
+     */
+    size_t round_up(size_t bytes) const {
+        return (bytes + entity.get_align() - 1) & ~(entity.get_align() - 1);
+    }
+
+    // 内存池管理
+    void* refill(size_t node_size, const size_t& nodes = 20);
+    char* chunk_alloc(size_t node_size, unsigned int& nodes);
+
+public:
+    // 模板构造函数，允许从其他类型的allocator构造
+    template<typename U>
+    struct rebind {
+        using other = pool_allocator<threads, U>;
+    };
+
+    // 构造函数和析构函数
+    pool_allocator() noexcept = default;
+    template<typename U>
+    pool_allocator(const pool_allocator<threads, U>&) noexcept {}
+    ~pool_allocator() noexcept override = default;
+
+public:
+    // 内存分配：优先使用内存池，大块内存直接使用malloc
+    T* allocate(size_t n) override {
+        if(n * sizeof(T) > entity.max_bytes()) {
+            return static_cast<T*>(malloc(n * sizeof(T)));
+        }
+
+        free_list_node* block = entity.get_free_list(get_free_serial_index(n * sizeof(T)));
+        if(block) {
+            entity.set_free_list(get_free_serial_index(n * sizeof(T)), block->block);
+            return static_cast<T*>(block);
+        }
+
+        return static_cast<T*>(refill(round_up(n * sizeof(T))));
+    }
+
+    // 内存释放：优先使用内存池，大块内存直接使用free
+    void deallocate(T* ptr, size_t n) noexcept override {
+        if(n * sizeof(T) > entity.get_max_bytes()) {
+            free(ptr);
+            return;
+        }
+        
+        if(ptr) {
+            free_list_node* my_free_list = entity.get_free_list(get_free_serial_index(n * sizeof(T)));
+            ((free_list_node*)ptr)->block = my_free_list;
+            entity.set_free_list(get_free_serial_index(n * sizeof(T)), (free_list_node*)ptr);
+        }
+    }
+
+    // 内存重分配：优先使用内存池，大块内存直接使用realloc
+    T* reallocate(T* ptr, size_t old_size, size_t new_size) override {
+        if(old_size * sizeof(T) > entity.get_max_bytes() && new_size * sizeof(T) > entity.get_max_bytes()) {
+            return static_cast<T*>(realloc(ptr, new_size * sizeof(T)));
+        }
+        if(round_up(old_size * sizeof(T)) == round_up(new_size * sizeof(T))) {
+            return ptr;
+        }
+
+        T* result = allocate(new_size);
+        size_t copy_sz = new_size > old_size ? old_size : new_size;
+        memcpy(result, ptr, copy_sz * sizeof(T));
+        deallocate(ptr, old_size);
         return result;
     }
-    else if(bytes_left >= node_size){//内存池不足以分配nodes个node_size的节点，但剩余空间至少足够分配一个节点，那就将剩余零碎余量返回给refill挂到对应链表
-        size_t left_nodes = bytes_left / node_size;
-        result = start;//直接返回连续内存就行了，refill会判断有多少个node
-        start += left_nodes * node_size;
-        return result;
+
+    size_t max_size() const noexcept override {
+        return size_t(-1) / sizeof(T);
     }
-    else{//一个node都无法分配，扩容后再分nodes个node_size的连续内存
-        size_t bytes_to_get = 2 * need_bytes + round_up(pool_size>>4);//经验值:2倍申请大小+1/16池子大小
+};
 
-        if(bytes_left > 0){//剩余空间挂到对应空闲链表
-            free_list_node* my_free_list = free_serial[get_free_serial_index(bytes_left)];//定位对应的空闲链表
-            free_list_node* new_node = (free_list_node*)start;
-            new_node->block = my_free_list;  // 新节点指向当前链表头
-            free_serial[get_free_serial_index(bytes_left)] = new_node;  // 更新链表头
-        }
-
-        //扩容
-        start = (char*)malloc(bytes_to_get);
-        if(!start){//从更大的空闲链表中回收空间到内存池
-            for(int i = node_size; i < NUM_OF_NODES; i++){
-                if(free_serial[i]){
-                    free_serial[i] = free_serial[i]->block;
-                    start = (char*)free_serial[i];
-                    end = start + node_size;
-                    return chunk_alloc(node_size, nodes, handler);//补充了内存池后递归调用，至少能分配一个node的连续内存
-                }
-            }
-        }
-
-        //扩容失败，调用自己定义的带异常处理机制的malloc扩容
-        start = (char*)allocator<threads, T>::allocate(bytes_to_get/sizeof(T), handler);
-        if(!start){//还失败，那没辙
-            throw OutOfMemoryException();
-        }
-        //或者成功扩容，则更新内存池状态，再尝试分nodes个node_size的连续内存
-        pool_size += bytes_to_get;
-        end = start + bytes_to_get;
-        return chunk_alloc(node_size, nodes, handler);
-    }
-}
-
-/* 从内存池分出一批块(20次小分配触发一次syscall)，插入链表(O(1))，然后返回其中一块 
-1）分层设计：调用 chunk_alloc 从内存池分出一批块的连续内存
-2）分层设计：refill负责将chunk_alloc返回的内存组织成链表，挂回对应空闲链表，只返回第一块
-*/
+// 实现refill和chunk_alloc方法
 template<bool threads, typename T>
-void* pool_allocator<threads, T>::refill(size_t node_size, const size_t& nodes, const execption_handler handler){
-    char* chunk = chunk_alloc(node_size, nodes, handler);
-    if(nodes == 1)
+void* pool_allocator<threads, T>::refill(size_t node_size, const size_t& nodes) {
+    unsigned int nobjs = nodes;
+    char* chunk = chunk_alloc(node_size, nobjs);
+    if(nobjs == 1)
         return chunk;
 
-    //将chunk组织成链表，挂回对应空闲链表
-    free_list_node* my_free_list = free_serial[get_free_serial_index(node_size)];
+    free_list_node* my_free_list = entity.get_free_list(get_free_serial_index(node_size));
     my_free_list->block = (free_list_node*)chunk;
 
     free_list_node* current_node = (free_list_node*)((char*)chunk + node_size);
     free_list_node* next_node = (free_list_node*)((char*)current_node + node_size);
-    if(next_node > (free_list_node*)((char*)end-node_size)){//内存池不足时返回不足nodes个，需要判断next_node是否越界
-        return chunk; //内存池只分配了一个node，直接返回
+    if(next_node > (free_list_node*)((char*)entity.get_end()-node_size)) {
+        return chunk;
     }
 
-    //将chunk组织成链表，挂回对应空闲链表
-    for(int i = 1; i < nodes - 1; i++){
+    for(int i = 1; i < nobjs - 1; i++) {
         current_node->block = next_node;
-        if(i == nodes - 2){
+        if(i == nobjs - 2) {
             next_node->block = nullptr;
             break;
         }
 
-        if((free_list_node*)((char*)next_node + node_size) > (free_list_node*)((char*)end-node_size)){//内存池不足时返回不足nodes个，需要判断next_node+1是否越界
+        if((free_list_node*)((char*)next_node + node_size) > (free_list_node*)((char*)entity.get_end()-node_size)) {
             next_node->block = nullptr;
             break;
         }
@@ -161,49 +205,53 @@ void* pool_allocator<threads, T>::refill(size_t node_size, const size_t& nodes, 
         current_node = next_node;
         next_node = (free_list_node*)((char*)next_node + node_size);
     }
-    //返回第一块
     return chunk;
 }
 
-/* 
-1)大于 128 字节：直接调用第一级配置器。
-2)小于等于 128：
-2.1)从空闲链表分配,如果链表非空，摘下头节点，O(1) 返回；
-2.2)否则调用 refill，从内存池分出一批块(20次小分配触发一次syscall)，插入链表(O(1))，然后返回其中一块
- */
 template<bool threads, typename T>
-void* pool_allocator<threads, T>::allocate(size_t n, const execption_handler handler){
-    if(n > MAX_BYTES){//大于池子的最大值，走系统调用
-        return allocator<threads, T>::allocate(n, handler);
+char* pool_allocator<threads, T>::chunk_alloc(size_t node_size, unsigned int& nodes) {
+    char* result;
+    size_t need_bytes = node_size * nodes;
+    size_t bytes_left = entity.get_end() - entity.get_start();
+
+    if(bytes_left >= need_bytes) {
+        result = entity.get_start();
+        entity.set_start(entity.get_start() + need_bytes);
+        return result;
     }
-
-    //先从空闲链表分配
-    free_list_node* block = free_serial[get_free_serial_index(n*sizeof(T))];
-    if(block){//头快非空，取出头块返回；O(1)
-        free_serial[get_free_serial_index(n*sizeof(T))] = block->block;
-        return block;
+    else if(bytes_left >= node_size) {
+        nodes = bytes_left / node_size;
+        result = entity.get_start();
+        entity.set_start(entity.get_start() + nodes * node_size);
+        return result;
     }
+    else {
+        size_t bytes_to_get = 2 * need_bytes + round_up(entity.get_pool_size()>>4);
 
-    //如果空闲链表为空，则从内存池批量分配块
-    return refill(round_up(n*sizeof(T)), size_t(20), handler);
-}
+        if(bytes_left > 0) {
+            free_list_node* my_free_list = entity.get_free_list(get_free_serial_index(bytes_left));
+            ((free_list_node*)entity.get_start())->block = my_free_list;
+            entity.set_free_list(get_free_serial_index(bytes_left), (free_list_node*)entity.get_start());
+        }
 
-/*  */
-template<bool threads, typename T>
-void* pool_allocator<threads, T>::reallocate(T* ptr, size_t old_size, size_t new_size){
-    void* result;
-    size_t copy_size;
-    
-}
+        entity.set_start((char*)malloc(bytes_to_get));
+        if(!entity.get_start()) {
+            for(int i = node_size; i < entity.get_num_of_nodes(); i++) {
+                if(entity.get_free_list(i)) {
+                    entity.set_free_list(i, entity.get_free_list(i)->block);
+                    entity.set_start((char*)entity.get_free_list(i));
+                    entity.set_end(entity.get_start() + node_size);
+                    return chunk_alloc(node_size, nodes);
+                }
+            }
+            return nullptr;
+        }
 
-
-/*  */
-template<bool threads, typename T>
-void pool_allocator<threads, T>::deallocate(T* ptr){
-    if(ptr){
-        free_serial[get_free_serial_index(ptr)]->block = ptr;
+        entity.set_pool_size(entity.get_pool_size() + bytes_to_get);
+        entity.set_end(entity.get_start() + bytes_to_get);
+        return chunk_alloc(node_size, nodes);
     }
 }
 
-}
+} // namespace Cat
 
