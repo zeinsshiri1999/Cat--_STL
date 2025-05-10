@@ -2,6 +2,7 @@
 #include "Cat++_allocator.h"
 #include <cstdlib>
 #include <cstring>
+#include <type_traits>
 //线程安全
 //尽量兼容STL接口规范
 //异常处理
@@ -45,7 +46,7 @@ private:
     // 内存池状态
     static inline char* start = nullptr;                     // 内存池起始位置
     static inline char* end = nullptr;                       // 内存池结束位置
-    static inline size_t pool_size = 0;                      // 内存池大小
+    static inline size_t size = 0;                           // 内存池大小
     static inline free_list_node* free_serial[NUM_OF_NODES] = {nullptr}; // 空闲链表数组
 
 public:
@@ -59,21 +60,25 @@ public:
     static void set_start(char* ptr) { start = ptr; }
     static char* get_end() { return end; }
     static void set_end(char* ptr) { end = ptr; }
-    static size_t get_pool_size() { return pool_size; }
-    static void set_pool_size(size_t size) { pool_size = size; }
+    static size_t get_size() { return size; }
+    static void set_size(size_t size) { size = size; }
     
     // 空闲链表操作接口
     static free_list_node* get_free_list(size_t index) { return free_serial[index]; }
     static void set_free_list(size_t index, free_list_node* node) { free_serial[index] = node; }
 };
 
+// 定义具体的别名
+using pool_t = alloc_pool<true>;   // 线程安全版本
+using pool_f = alloc_pool<false>;  // 非线程安全版本
+
 // 内存池分配器类
 template<bool threads, typename T>
 class pool_allocator : public allocator<threads, T> {
 private:
-    alloc_pool<threads> entity;
-
     // 内存池管理方法
+    using pool = typename std::conditional<threads, pool_t, pool_f>::type;
+    
     /*
      * 内存对齐计算：
      * 1. 未对齐情况：bytes = k * ALIGN + remainder
@@ -84,7 +89,7 @@ private:
      *    结果：k - 1
      */
     size_t get_free_serial_index(size_t bytes) const {
-        return (bytes + entity.get_align() - 1) / entity.get_align() - 1;
+        return (bytes + pool::get_align() - 1) / pool::get_align() - 1;
     }
 
     /*
@@ -102,7 +107,7 @@ private:
      * - 通过位运算实现向上取整到ALIGN的倍数
      */
     size_t round_up(size_t bytes) const {
-        return (bytes + entity.get_align() - 1) & ~(entity.get_align() - 1);
+        return (bytes + pool::get_align() - 1) & ~(pool::get_align() - 1);
     }
 
     // 内存池管理
@@ -125,13 +130,13 @@ public:
 public:
     // 内存分配：优先使用内存池，大块内存直接使用malloc
     T* allocate(size_t n) override {
-        if(n * sizeof(T) > entity.max_bytes()) {
+        if(n * sizeof(T) > pool::get_max_bytes()) {
             return static_cast<T*>(malloc(n * sizeof(T)));
         }
 
-        free_list_node* block = entity.get_free_list(get_free_serial_index(n * sizeof(T)));
+        free_list_node* block = pool::get_free_list(get_free_serial_index(n * sizeof(T)));
         if(block) {
-            entity.set_free_list(get_free_serial_index(n * sizeof(T)), block->block);
+            pool::set_free_list(get_free_serial_index(n * sizeof(T)), block->block);
             return static_cast<T*>(block);
         }
 
@@ -140,21 +145,21 @@ public:
 
     // 内存释放：优先使用内存池，大块内存直接使用free
     void deallocate(T* ptr, size_t n) noexcept override {
-        if(n * sizeof(T) > entity.get_max_bytes()) {
+        if(n * sizeof(T) > pool::get_max_bytes()) {
             free(ptr);
             return;
         }
         
         if(ptr) {
-            free_list_node* my_free_list = entity.get_free_list(get_free_serial_index(n * sizeof(T)));
+            free_list_node* my_free_list = pool::get_free_list(get_free_serial_index(n * sizeof(T)));
             ((free_list_node*)ptr)->block = my_free_list;
-            entity.set_free_list(get_free_serial_index(n * sizeof(T)), (free_list_node*)ptr);
+            pool::set_free_list(get_free_serial_index(n * sizeof(T)), (free_list_node*)ptr);
         }
     }
 
     // 内存重分配：优先使用内存池，大块内存直接使用realloc
     T* reallocate(T* ptr, size_t old_size, size_t new_size) override {
-        if(old_size * sizeof(T) > entity.get_max_bytes() && new_size * sizeof(T) > entity.get_max_bytes()) {
+        if(old_size * sizeof(T) > pool::get_max_bytes() && new_size * sizeof(T) > pool::get_max_bytes()) {
             return static_cast<T*>(realloc(ptr, new_size * sizeof(T)));
         }
         if(round_up(old_size * sizeof(T)) == round_up(new_size * sizeof(T))) {
@@ -181,12 +186,12 @@ void* pool_allocator<threads, T>::refill(size_t node_size, const size_t& nodes) 
     if(nobjs == 1)
         return chunk;
 
-    free_list_node* my_free_list = entity.get_free_list(get_free_serial_index(node_size));
+    free_list_node* my_free_list = pool::get_free_list(get_free_serial_index(node_size));
     my_free_list->block = (free_list_node*)chunk;
 
     free_list_node* current_node = (free_list_node*)((char*)chunk + node_size);
     free_list_node* next_node = (free_list_node*)((char*)current_node + node_size);
-    if(next_node > (free_list_node*)((char*)entity.get_end()-node_size)) {
+    if(next_node > (free_list_node*)((char*)pool::get_end()-node_size)) {
         return chunk;
     }
 
@@ -197,7 +202,7 @@ void* pool_allocator<threads, T>::refill(size_t node_size, const size_t& nodes) 
             break;
         }
 
-        if((free_list_node*)((char*)next_node + node_size) > (free_list_node*)((char*)entity.get_end()-node_size)) {
+        if((free_list_node*)((char*)next_node + node_size) > (free_list_node*)((char*)pool::get_end()-node_size)) {
             next_node->block = nullptr;
             break;
         }
@@ -212,43 +217,43 @@ template<bool threads, typename T>
 char* pool_allocator<threads, T>::chunk_alloc(size_t node_size, unsigned int& nodes) {
     char* result;
     size_t need_bytes = node_size * nodes;
-    size_t bytes_left = entity.get_end() - entity.get_start();
+    size_t bytes_left = pool::get_end() - pool::get_start();
 
     if(bytes_left >= need_bytes) {
-        result = entity.get_start();
-        entity.set_start(entity.get_start() + need_bytes);
+        result = pool::get_start();
+        pool::set_start(pool::get_start() + need_bytes);
         return result;
     }
     else if(bytes_left >= node_size) {
         nodes = bytes_left / node_size;
-        result = entity.get_start();
-        entity.set_start(entity.get_start() + nodes * node_size);
+        result = pool::get_start();
+        pool::set_start(pool::get_start() + nodes * node_size);
         return result;
     }
     else {
-        size_t bytes_to_get = 2 * need_bytes + round_up(entity.get_pool_size()>>4);
+        size_t bytes_to_get = 2 * need_bytes + round_up(pool::get_size()>>4);
 
         if(bytes_left > 0) {
-            free_list_node* my_free_list = entity.get_free_list(get_free_serial_index(bytes_left));
-            ((free_list_node*)entity.get_start())->block = my_free_list;
-            entity.set_free_list(get_free_serial_index(bytes_left), (free_list_node*)entity.get_start());
+            free_list_node* my_free_list = pool::get_free_list(get_free_serial_index(bytes_left));
+            ((free_list_node*)pool::get_start())->block = my_free_list;
+            pool::set_free_list(get_free_serial_index(bytes_left), (free_list_node*)pool::get_start());
         }
 
-        entity.set_start((char*)malloc(bytes_to_get));
-        if(!entity.get_start()) {
-            for(int i = node_size; i < entity.get_num_of_nodes(); i++) {
-                if(entity.get_free_list(i)) {
-                    entity.set_free_list(i, entity.get_free_list(i)->block);
-                    entity.set_start((char*)entity.get_free_list(i));
-                    entity.set_end(entity.get_start() + node_size);
+        pool::set_start((char*)malloc(bytes_to_get));
+        if(!pool::get_start()) {
+            for(int i = node_size; i < pool::get_num_of_nodes(); i++) {
+                if(pool::get_free_list(i)) {
+                    pool::set_free_list(i, pool::get_free_list(i)->block);
+                    pool::set_start((char*)pool::get_free_list(i));
+                    pool::set_end(pool::get_start() + node_size);
                     return chunk_alloc(node_size, nodes);
                 }
             }
             return nullptr;
         }
 
-        entity.set_pool_size(entity.get_pool_size() + bytes_to_get);
-        entity.set_end(entity.get_start() + bytes_to_get);
+        pool::set_size(pool::get_size() + bytes_to_get);
+        pool::set_end(pool::get_start() + bytes_to_get);
         return chunk_alloc(node_size, nodes);
     }
 }
