@@ -4,6 +4,7 @@
 #include <cstdlib>
 
 #include "../execption/allocator_exception.h"
+#include "../traits/Cat++_type_traits.h"
 //allocator interface
 
 //线程安全
@@ -14,16 +15,11 @@
 namespace Cat {
     
 template<bool threads, class T>
-class allocator_interface {
+class allocator_interface : public allocator_traits<threads, T> {
 public:
     // 向外传递类型
-    typedef T           value_type;
-    typedef T*          pointer;
-    typedef const T*    const_pointer;
-    typedef T&          reference;
-    typedef const T&    const_reference;
-    typedef size_t      size_type;
-    typedef ptrdiff_t   difference_type;
+    using traits = allocator_traits<threads, T>;
+    IMPORT_ALLOCATOR_TYPES(traits);
 
     typedef void(*exception_handler)();
 
@@ -46,14 +42,10 @@ template<bool threads, class T>
 class allocator : public allocator_interface<threads, T> {
 public:
     // 继承接口的类型
-    using typename allocator_interface<threads, T>::value_type;//不这样外部使用时，需要写allocator<false, int>::allocator_interface<false, int>::value_type
-    using typename allocator_interface<threads, T>::pointer;
-    using typename allocator_interface<threads, T>::const_pointer;
-    using typename allocator_interface<threads, T>::reference;
-    using typename allocator_interface<threads, T>::const_reference;
-    using typename allocator_interface<threads, T>::size_type;
-    using typename allocator_interface<threads, T>::difference_type;
-    using typename allocator_interface<threads, T>::exception_handler;
+    using traits = allocator_interface<threads, T>;
+    IMPORT_ALLOCATOR_TYPES(traits);
+
+    using typename traits::exception_handler;
 
     // 异常处理
     static exception_handler set_exception_handler(exception_handler f) {

@@ -76,7 +76,11 @@ using pool_f = alloc_pool<false>;  // 非线程安全版本
 template<bool threads, typename T>
 class pool_allocator : public allocator<threads, T> {
 private:
-    // 内存池访问别名
+    //继承类型
+    using traits = allocator<threads, T>;
+    IMPORT_ALLOCATOR_TYPES(traits);
+
+    // 内存池访问别名,内存池是公有的，所以不继承一份这些数据
     using pool = typename std::conditional<threads, pool_t, pool_f>::type;
     
     /*

@@ -3,6 +3,7 @@
 #include "./Cat++_pool_alloc.h"
 #include "../execption/allocator_exception.h"
 #include <memory>
+#include "../traits/Cat++_type_traits.h"
 
 namespace Cat {
 
@@ -21,15 +22,7 @@ class alloc<threads, T, stl_tag> : public std::allocator<T> {
     using type = std::allocator<T>;
 public:
     using type::type;  // 继承构造函数
-
-    // 继承类型
-    using type::value_type;
-    using type::pointer;
-    using type::const_pointer;
-    using type::reference;
-    using type::const_reference;
-    using type::size_type;
-    using type::difference_type;
+    IMPORT_ALLOCATOR_TYPES(type);//继承类型
 };
 
 // 简单分配器特化
@@ -38,15 +31,7 @@ class alloc<threads, T, simple_tag> : public allocator<threads, T> {
     using type = allocator<threads, T>;
 public:
     using type::type;  // 继承构造函数
-
-    // 继承类型
-    using type::value_type;
-    using type::pointer;
-    using type::const_pointer;
-    using type::reference;
-    using type::const_reference;
-    using type::size_type;
-    using type::difference_type;
+    IMPORT_ALLOCATOR_TYPES(type);//继承类型
 };
 
 // 池分配器特化
@@ -55,16 +40,7 @@ class alloc<threads, T, pool_tag> : public pool_allocator<threads, T> {
     using type = pool_allocator<threads, T>;
 public:
     using type::type;  // 继承构造函数
-
-    // 继承类型
-    using type::value_type;
-    using type::pointer;
-    using type::const_pointer;
-    using type::reference;
-    using type::const_reference;
-    using type::size_type;
-    using type::difference_type;
-
+    IMPORT_ALLOCATOR_TYPES(type);//继承类型
 };
 
 } // namespace Cat

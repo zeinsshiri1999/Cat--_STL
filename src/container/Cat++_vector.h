@@ -5,6 +5,7 @@
 #include <functional>   // 用于std::function
 #include "../alloc/Cat++_alloc_selector.h"  // 自定义分配器
 #include "../execption/allocator_exception.h"  // 自定义异常
+#include "../traits/Cat++_type_traits.h"  // 容器类型特征
 
 namespace Cat {
 
@@ -50,84 +51,137 @@ namespace Cat {
  */
 
 // 数据层：vector_base - 定义内存布局
-template<typename T, typename Allocator = alloc<false, T>>
-class vector_base {
-public:
-    using value_type = T;
-    using allocator_type = Allocator;
-    using size_type = std::size_t;
-    using difference_type = std::ptrdiff_t;
-    using pointer = typename allocator_type::pointer;
-    using const_pointer = typename allocator_type::const_pointer;
-    using reference = value_type&;
-    using const_reference = const value_type&;
-
-    // 迭代器类型定义
-    using iterator = pointer;
-    using const_iterator = const_pointer;
-    using reverse_iterator = std::reverse_iterator<iterator>;
-    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-
+template<typename T, typename Allocator>
+class vector_entity : public sequence_traits<T, Allocator> {
+    using traits = sequence_traits<T, Allocator>;
+    IMPORT_SEQUENCE_TYPES(traits);
 protected:
     pointer start_ = nullptr;           // 指向第一个元素
     pointer finish_ = nullptr;          // 指向最后一个元素的下一个位置
     pointer end_of_storage_ = nullptr;  // 指向分配内存的末尾
     allocator_type alloc_;              // 分配器实例
-    size_type growth_factor_ = 2;       // 扩容因子
-    size_type initial_capacity_ = 16;   // 初始容量
+    static inline size_type growth_factor_ = 2;       // 扩容因子
+    static inline size_type initial_capacity_ = 16;   // 初始容量
 
     // 计算属性
-    std::function<size_type()> size = [this]() { return finish_ - start_; };
-    std::function<size_type()> capacity = [this]() { return end_of_storage_ - start_; };
+    size_type size() const { return finish_ - start_; }
+    size_type capacity() const { return end_of_storage_ - start_; }
 
 protected:
     // 默认容量0初始化
-    // 指定容量0初始化
-    // 指定容量和值初始化
-    // 范围初始化
-    // 拷贝构造
-    // 移动构造
-    // 析构
-    vector_base() {
+    vector_entity() : alloc_(typename traits::allocator_type()) {// explicit 修饰的但参数构造函数不能用于隐式转换，多参数构造函数本身就不会发生隐式转换，char*常作为连续内存的指针类型，也不希望显式转换
         try {
             start_ = alloc_.allocate(initial_capacity_);
             finish_ = start_;
             end_of_storage_ = start_ + initial_capacity_;
         } catch (const std::exception& e) {
-            throw OutOfMemoryException();
+            throw allocator_exception(e.what());
         }
     }
-    
-    // 分配n个元素的内存
-    vector_base(size_type n, const allocator_type& a) : alloc_(a) {
+    // 指定容量0初始化
+    explicit vector_entity(size_type capacity) : alloc_(typename traits::allocator_type()) {
+        capacity = (capacity <= initial_capacity_) ? initial_capacity_ : capacity;
+        
         try {
-            start_ = alloc_.allocate(n);
+            start_ = alloc_.allocate(capacity);
             finish_ = start_;
-            end_of_storage_ = start_ + n;
+            end_of_storage_ = start_ + capacity;
         } catch (const std::exception& e) {
-            throw OutOfMemoryException();
+            throw allocator_exception(e.what());
         }
     }
-
-    ~vector_base() {
+    // 指定容量和值初始化
+    template<typename... Args>
+    vector_entity(size_type capacity, Args&&... args) : alloc_(typename traits::allocator_type()) {
+        capacity = (capacity <= initial_capacity_) ? initial_capacity_ : capacity;
+        int argsnum = sizeof...(args);
+        try {
+            if(capacity >= argsnum){//正常分配内存
+                start_ = static_cast<typename traits::pointer>(alloc_.allocate(capacity));
+                // 用args构造对象
+                for (size_type i = 0; i < argsnum; ++i) {
+                    alloc_.construct(start_ + i, std::forward<Args>(args)...);
+                }
+                finish_ = start_ + argsnum*(sizeof(typename traits::value_type));
+                end_of_storage_ = start_ + capacity*(sizeof(typename traits::value_type));
+            }
+            else{//按照args数量分配内存，或自动计算一个合适的容量分配
+                start_ = static_cast<typename traits::pointer>(alloc_.allocate(argsnum));
+                // 用args构造对象
+                for (size_type i = 0; i < argsnum; ++i) {
+                    alloc_.construct(start_ + i, std::forward<Args>(args)...);
+                }
+                finish_ = start_ + argsnum*(sizeof(typename traits::value_type));
+                end_of_storage_ = start_ + capacity*(sizeof(typename traits::value_type));
+            }
+        } catch (const std::exception& e) {
+            // 如果构造过程中发生异常，需要清理已构造的对象
+            if (start_) {
+                for (typename traits::pointer p = start_; p != finish_; ++p) {
+                    alloc_.destroy(p);
+                }
+                alloc_.deallocate(start_, (capacity>argsnum)?capacity:argsnum);
+            }
+            throw allocator_exception(e.what());
+        }
+    }
+    // 范围初始化?
+    template<typename InputIterator>
+    vector_entity(InputIterator first, InputIterator last) : alloc_(typename traits::allocator_type()) {
+        try {
+            start_ = static_cast<typename traits::pointer>(alloc_.allocate(last - first));
+            finish_ = start_;
+            end_of_storage_ = start_ + (last - first);
+            for (InputIterator it = first; it != last; ++it) {
+                alloc_.construct(finish_, *it);
+                ++finish_;
+            }
+        } catch (const std::exception& e) {
+            throw allocator_exception(e.what());
+        }
+    }
+    // 拷贝构造
+    vector_entity(const vector_entity& x) : alloc_(x.alloc_) {
+        try {
+            start_ = static_cast<typename traits::pointer>(alloc_.allocate(x.capacity()));
+            finish_ = start_;
+            
+            for (typename traits::const_iterator it = x.start_; it != x.finish_; ++it) {
+                alloc_.construct(finish_++, *it);  // 调用拷贝构造函数?
+            }
+            end_of_storage_ = start_ + (x.end_of_storage_ - x.start_);
+        } catch (const std::exception& e) {
+            throw allocator_exception(e.what());
+        }
+    }
+    // 移动构造
+    vector_entity(vector_entity&& x) noexcept 
+        : start_(x.start_)
+        , finish_(x.finish_)
+        , end_of_storage_(x.end_of_storage_)
+        , alloc_(std::move(x.alloc_)) {
+        x.start_ = x.finish_ = x.end_of_storage_ = nullptr;
+    }
+    // 析构
+    ~vector_entity() {
         if (start_) {
             alloc_.deallocate(start_, end_of_storage_ - start_);
-            start_ = finish_ = end_of_storage_ = nullptr;
+            start_ = finish_ = end_of_storage_ = alloc_ = nullptr;
         }
     }
 
 public:
     // 指针相关属性
-    pointer get_start() const { return start_; }
-    void set_start(pointer ptr) { start_ = ptr; }
-    pointer get_finish() const { return finish_; }
-    void set_finish(pointer ptr) { finish_ = ptr; }
-    pointer get_end_of_storage() const { return end_of_storage_; }
-    void set_end_of_storage(pointer ptr) { end_of_storage_ = ptr; }
+    typename traits::pointer get_start() const { return start_; }
+    void set_start(typename traits::pointer ptr) { start_ = ptr; }
+    typename traits::pointer get_finish() const { return finish_; }
+    void set_finish(typename traits::pointer ptr) { finish_ = ptr; }
+    typename traits::pointer get_end_of_storage() const { return end_of_storage_; }
+    void set_end_of_storage(typename traits::pointer ptr) { end_of_storage_ = ptr; }
 
     // 分配器相关属性
-    allocator_type& get_allocator() { return alloc_; }
-    const allocator_type& get_allocator() const { return alloc_; }
+    typename traits::allocator_type& get_allocator() { return alloc_; }
+    const typename traits::allocator_type& get_allocator() const { return alloc_; }
 
     // 计算属性（只读）
     size_type get_size() const { return size(); }
@@ -146,95 +200,153 @@ public:
         }
         return std::max(get_capacity() * get_growth_factor(), min_capacity);
     }
+
 };
 
-// 操作层：vector - 定义功能接口
-template<typename T, typename Allocator = alloc<false, T>>
-class vector : private vector_base<T, Allocator> {
-    using base = vector_base<T, Allocator>;
-    using typename base::value_type;
-    using typename base::allocator_type;
-    using typename base::size_type;
-    using typename base::difference_type;
-    using typename base::pointer;
-    using typename base::const_pointer;
-    using typename base::reference;
-    using typename base::const_reference;
-    using typename base::iterator;
-    using typename base::const_iterator;
-    using typename base::reverse_iterator;
-    using typename base::const_reverse_iterator;
-
+// 接口层：vector_interface - 定义标准接口
+template<typename T, typename Allocator>
+class vector_interface : public sequence_traits<T, Allocator> {
+    using traits = sequence_traits<T, Allocator>;
+    IMPORT_SEQUENCE_TYPES(traits);
 public:
-    // 构造函数
-    vector() : base() {}
-    explicit vector(size_type n) : base(n, allocator_type()) { fill_initialize(n, value_type()); }
-    vector(size_type n, const value_type& value) : base(n, allocator_type()) { fill_initialize(n, value); }
+    // 二、赋值操作
+    virtual vector_interface& operator=(const vector_interface& x) = 0;
+    virtual vector_interface& operator=(vector_interface&& x) noexcept = 0;
+    virtual void assign(size_type n, const value_type& val) = 0;
     template<typename InputIterator>
-    vector(InputIterator first, InputIterator last) : base() {
-        range_initialize(first, last);
-    }
-    vector(const vector& x) : base() { range_initialize(x.begin(), x.end()); }
-    vector(vector&& x) noexcept : base() { swap(x); }
+    void assign(InputIterator first, InputIterator last);
+
+    // 三、迭代器操作
+    virtual iterator begin() noexcept = 0;
+    virtual const_iterator begin() const noexcept = 0;
+    virtual iterator end() noexcept = 0;
+    virtual const_iterator end() const noexcept = 0;
+    virtual reverse_iterator rbegin() noexcept { return reverse_iterator(end()); }
+    virtual const_reverse_iterator rbegin() const noexcept { return const_reverse_iterator(end()); }
+    virtual reverse_iterator rend() noexcept { return reverse_iterator(begin()); }
+    virtual const_reverse_iterator rend() const noexcept { return const_reverse_iterator(begin()); }
+
+    // 四、容量操作
+    virtual size_type size() const noexcept = 0;
+    virtual size_type capacity() const noexcept = 0;
+    virtual bool empty() const noexcept { return size() == 0; }
+    virtual void reserve(size_type n) = 0;
+    virtual void resize(size_type new_size, const value_type& x = value_type()) = 0;
+    virtual void shrink_to_fit() = 0;
+
+    // 五、元素访问
+    virtual reference operator[](size_type n) = 0;
+    virtual const_reference operator[](size_type n) const = 0;
+    virtual reference at(size_type n) = 0;
+    virtual const_reference at(size_type n) const = 0;
+    virtual reference front() { return *begin(); }
+    virtual const_reference front() const { return *begin(); }
+    virtual reference back() { return *(end() - 1); }
+    virtual const_reference back() const { return *(end() - 1); }
+    virtual pointer data() noexcept { return begin(); }
+    virtual const_pointer data() const noexcept { return begin(); }
+
+    // 六、修改操作
+    virtual void push_back(const value_type& x) = 0;
+    virtual void push_back(value_type&& x) = 0;
+    virtual void pop_back() = 0;
+    
+    virtual iterator insert(const_iterator position, const value_type& x) = 0;
+    virtual iterator insert(const_iterator position, value_type&& x) = 0;
+    virtual iterator insert(const_iterator position, size_type n, const value_type& x) = 0;
+    template<typename InputIterator>
+    iterator insert(const_iterator position, InputIterator first, InputIterator last);
+    
+    virtual iterator erase(const_iterator position) = 0;
+    virtual iterator erase(const_iterator first, const_iterator last) = 0;
+    virtual void clear() noexcept = 0;
+    
+    virtual void swap(vector_interface& x) noexcept = 0;
+};
+
+// 实现类：vector - 继承实体类并实现接口
+template<typename T, typename Allocator = alloc<true, T, pool_tag>>
+class vector : private vector_entity<T, Allocator>, public vector_interface<T, Allocator> {
+    using entity = vector_entity<T, Allocator>;
+    using interface = vector_interface<T, Allocator>;
+    using traits = sequence_traits<T, Allocator>;
+    IMPORT_SEQUENCE_TYPES(traits);
+public:
+    // 一、构造与析构
+    vector() : entity() {}
+    explicit vector(size_type n) : entity(n, allocator_type()) { fill_initialize(n, value_type()); }
+    vector(size_type n, const value_type& value) : entity(n, allocator_type()) { fill_initialize(n, value); }
+    template<typename InputIterator>
+    vector(InputIterator first, InputIterator last) : entity() { range_initialize(first, last); }
+    vector(const vector& x) : entity() { range_initialize(x.begin(), x.end()); }
+    vector(vector&& x) noexcept : entity() { swap(x); }
     ~vector() { destroy(begin(), end()); }
 
-    // 赋值操作
-    vector& operator=(const vector& x) {
+    // 二、赋值操作
+    vector& operator=(const vector& x) override {
         if (this != &x) {
-            assign(x.begin(), x.end());
+            clear();
+            range_initialize(x.begin(), x.end());
         }
         return *this;
     }
-    vector& operator=(vector&& x) noexcept {
+    vector& operator=(vector&& x) noexcept override {
         if (this != &x) {
             clear();
             swap(x);
         }
         return *this;
     }
-
-    // 迭代器操作
-    iterator begin() { return this->get_start(); }
-    const_iterator begin() const { return this->get_start(); }
-    iterator end() { return this->get_finish(); }
-    const_iterator end() const { return this->get_finish(); }
-    reverse_iterator rbegin() { return reverse_iterator(end()); }
-    const_reverse_iterator rbegin() const { return const_reverse_iterator(end()); }
-    reverse_iterator rend() { return reverse_iterator(begin()); }
-    const_reverse_iterator rend() const { return const_reverse_iterator(begin()); }
-
-    // 容量操作
-    size_type size() const { return size_type(end() - begin()); }
-    size_type capacity() const { return size_type(this->get_end_of_storage() - begin()); }
-    bool empty() const { return begin() == end(); }
-    void reserve(size_type n);
-    void resize(size_type new_size, const value_type& x = value_type());
-
-    // 元素访问
-    reference operator[](size_type n) { return *(begin() + n); }
-    const_reference operator[](size_type n) const { return *(begin() + n); }
-    reference at(size_type n);
-    const_reference at(size_type n) const;
-    reference front() { return *begin(); }
-    const_reference front() const { return *begin(); }
-    reference back() { return *(end() - 1); }
-    const_reference back() const { return *(end() - 1); }
-
-    // 修改操作
-    void push_back(const value_type& x);
-    void pop_back();
-    iterator insert(iterator position, const value_type& x);
-    void insert(iterator position, size_type n, const value_type& x);
+    void assign(size_type n, const value_type& val) override;
     template<typename InputIterator>
-    void insert(iterator position, InputIterator first, InputIterator last);
-    iterator erase(iterator position);
-    iterator erase(iterator first, iterator last);
-    void clear() { erase(begin(), end()); }
-    void swap(vector& x) noexcept {
-        std::swap(this->start_, x.start_);
-        std::swap(this->finish_, x.finish_);
-        std::swap(this->end_of_storage_, x.end_of_storage_);
-    }
+    void assign(InputIterator first, InputIterator last);
+
+    // 三、迭代器操作
+    iterator begin() noexcept override { return entity::get_start(); }
+    const_iterator begin() const noexcept override { return entity::get_start(); }
+    iterator end() noexcept override { return entity::get_finish(); }
+    const_iterator end() const noexcept override { return entity::get_finish(); }
+    reverse_iterator rbegin() noexcept override { return reverse_iterator(end()); }
+    const_reverse_iterator rbegin() const noexcept override { return const_reverse_iterator(end()); }
+    reverse_iterator rend() noexcept override { return reverse_iterator(begin()); }
+    const_reverse_iterator rend() const noexcept override { return const_reverse_iterator(begin()); }
+
+    // 四、容量操作
+    size_type size() const noexcept override { return entity::get_size(); }
+    size_type capacity() const noexcept override { return entity::get_capacity(); }
+    bool empty() const noexcept override { return begin() == end(); }
+    void reserve(size_type n) override;
+    void resize(size_type new_size, const value_type& x = value_type()) override;
+    void shrink_to_fit() override;
+
+    // 五、元素访问
+    reference operator[](size_type n) override { return *(begin() + n); }
+    const_reference operator[](size_type n) const override { return *(begin() + n); }
+    reference at(size_type n) override;
+    const_reference at(size_type n) const override;
+    reference front() override { return *begin(); }
+    const_reference front() const override { return *begin(); }
+    reference back() override { return *(end() - 1); }
+    const_reference back() const override { return *(end() - 1); }
+    pointer data() noexcept override { return begin(); }
+    const_pointer data() const noexcept override { return begin(); }
+
+    // 六、修改操作
+    void push_back(const value_type& x) override;
+    void push_back(value_type&& x) override;
+    void pop_back() override;
+    
+    iterator insert(const_iterator position, const value_type& x) override;
+    iterator insert(const_iterator position, value_type&& x) override;
+    iterator insert(const_iterator position, size_type n, const value_type& x) override;
+    template<typename InputIterator>
+    iterator insert(const_iterator position, InputIterator first, InputIterator last);
+    
+    iterator erase(const_iterator position) override;
+    iterator erase(const_iterator first, const_iterator last) override;
+    void clear() noexcept override;
+    
+    void swap(vector& x) noexcept override;
 
 private:
     // 辅助函数
@@ -243,33 +355,6 @@ private:
     void range_initialize(InputIterator first, InputIterator last);
     void destroy(iterator first, iterator last);
     void insert_aux(iterator position, const value_type& x);
-
-    // 内存管理
-    void reallocate(size_type new_capacity) {
-        if (new_capacity <= capacity()) {
-            return;
-        }
-
-        pointer new_start = this->get_allocator().allocate(new_capacity);
-        if (!new_start) {
-            throw OutOfMemoryException();
-        }
-
-        // 保存旧数据
-        pointer old_start = this->get_start();
-        pointer old_finish = this->get_finish();
-        size_type old_size = size();
-
-        // 更新指针
-        this->set_start(new_start);
-        this->set_finish(new_start + old_size);
-        this->set_end_of_storage(new_start + new_capacity);
-
-        // 释放旧内存
-        if (old_start) {
-            this->get_allocator().deallocate(old_start, this->get_end_of_storage() - old_start);
-        }
-    }
 };
 
 } // namespace Cat
