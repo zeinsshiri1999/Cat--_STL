@@ -21,7 +21,7 @@
             "request": "attach",                     //调试器启动方式：launch — 启动并调试新进程；attach — 调试已运行进程
             "name": "Debug_attach",                  // 调试配置名
             "program": "${workspaceFolder}/build/${fileBasenameNoExtension}", // 调试的可执行文件路径
-            "preLaunchTask": "run",                // 指定调试前执行的task任务
+            "preLaunchTask": "run",                  // 指定调试前执行的task任务
             "internalConsoleOptions": "neverOpen",   // 不切换到调试控制台, 在终端调试
             "stopOnEntry": false,                    // 是否在入口处停止
         },

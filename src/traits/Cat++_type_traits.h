@@ -1,143 +1,410 @@
 #pragma once
 #include <cstddef>
-#include <iterator>
-#include <utility>  // for std::pair
-#include <memory>   // for smart pointers
-#include "../Cat++_config.h"  // for VectorMode
+#include <memory>
+#include "../Cat++_config.h"  // for VectorMode, Mode
 
 namespace Cat {
 
-
-// 安全模式：使用智能指针和引用包装器，提供内存安全和边界检查
-// 高性能模式：使用原始指针和引用，提供最大性能
-template<VectorMode Mode, typename T>
-struct mode_traits {
-    // 基础类型：所有模式通用
-    using value_type = T;
-    using size_type = std::size_t;
-    using difference_type = std::ptrdiff_t;
-
-    // 高性能模式类型：直接使用原始指针和引用
-    using raw_pointer = T*;
-    using raw_const_pointer = const T*;
-    using raw_reference = T&;
-    using raw_const_reference = const T&;
-
-    // 安全模式类型：使用智能指针和引用包装器
-    using safe_pointer = std::shared_ptr<T>;
-    using safe_const_pointer = std::shared_ptr<const T>;
-    using safe_reference = std::reference_wrapper<T>;
-    using safe_const_reference = std::reference_wrapper<const T>;
-
-    // 根据模式选择最终使用的类型
-    // Safe模式：使用安全类型，提供内存安全和边界检查
-    // Fast模式：使用高性能类型，提供最大性能
-    using pointer = std::conditional_t<Mode == VectorMode::Safe, safe_pointer, raw_pointer>;
-    using const_pointer = std::conditional_t<Mode == VectorMode::Safe, safe_const_pointer, raw_const_pointer>;
-    using reference = std::conditional_t<Mode == VectorMode::Safe, safe_reference, raw_reference>;
-    using const_reference = std::conditional_t<Mode == VectorMode::Safe, safe_const_reference, raw_const_reference>;
-
-    // 迭代器类型：根据模式选择不同的迭代器实现
-    // Safe模式：使用智能指针作为迭代器，提供内存安全
-    // Fast模式：使用原始指针作为迭代器，提供最大性能
-    using iterator = std::conditional_t<Mode == VectorMode::Safe,
-        std::shared_ptr<T>,
-        T*>;
-    using const_iterator = std::conditional_t<Mode == VectorMode::Safe,
-        std::shared_ptr<const T>,
-        const T*>;
-    using reverse_iterator = std::reverse_iterator<iterator>;
-    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+// 1. 基础类型工具
+// 1.1 类型映射工具
+// 用例：type_identity<int>::type x = 42;
+template<typename T>
+struct type_identity {
+    using type = T;
 };
 
-// 基础类型特征：继承自模式特征
-template<typename T, VectorMode Mode = VectorMode::Safe>
-struct base_traits : public mode_traits<Mode, T> {
-    using base = mode_traits<Mode, T>;
+// 1.2 类型转换工具
+// 用例：conditional_t<true, int, double> x = 42;  // x是int类型
+template<bool B, typename T, typename F>
+struct conditional {
+    using type = T;
+};
+
+template<typename T, typename F>
+struct conditional<false, T, F> {
+    using type = F;
+};
+
+// 1.3 SFINAE工具
+// 用例：void_t<decltype(std::declval<T>().foo())>  // 检查T是否有foo()成员函数
+template<typename...>
+struct void_t {
+    using type = void;
+};
+
+// 1.4 类型比较工具
+// 用例：is_same_v<int, int>  // true
+template<typename T, typename U>
+struct is_same {
+    static constexpr bool value = false;
+};
+
+template<typename T>
+struct is_same<T, T> {
+    static constexpr bool value = true;
+};
+
+// 1.5 类型选择工具
+// 用例：enable_if_t<is_integral_v<T>, int> foo(T x) { return x; }  // 只接受整数类型
+template<bool B, typename T = void>
+struct enable_if {};
+
+template<typename T>
+struct enable_if<true, T> {
+    using type = T;
+};
+
+// 2. 类型检测系统
+// 2.1 基础类型检测
+// 用例：is_integral_v<int>  // true
+template<typename T>
+struct is_integral {
+    static constexpr bool value = false;
+};
+
+template<>
+struct is_integral<int> { static constexpr bool value = true; };
+template<>
+struct is_integral<long> { static constexpr bool value = true; };
+template<>
+struct is_integral<long long> { static constexpr bool value = true; };
+template<>
+struct is_integral<unsigned int> { static constexpr bool value = true; };
+template<>
+struct is_integral<unsigned long> { static constexpr bool value = true; };
+template<>
+struct is_integral<unsigned long long> { static constexpr bool value = true; };
+
+// 2.2 类型转换检测
+// 用例：is_convertible_v<int, double>  // true
+template<typename From, typename To>
+struct is_convertible {
+    static constexpr bool value = false;  // 需要实现
+};
+
+// 3. 成员检测系统
+// 3.1 成员类型存在性检测
+// 用例：has_value_type_v<vector<int>>  // true
+template<typename T, typename = void>
+struct has_value_type {
+    static constexpr bool value = false;
+};
+
+template<typename T>
+struct has_value_type<T, typename void_t<typename T::value_type>::type> {
+    static constexpr bool value = true;
+};
+
+// 3.2 成员函数存在性检测
+// 用例：has_allocate_v<allocator<int>>  // true
+template<typename T, typename = void>
+struct has_allocate {
+    static constexpr bool value = false;
+};
+
+template<typename T>
+struct has_allocate<T, typename void_t<
+    decltype(T().allocate(std::size_t{}))
+>::type> {
+    static constexpr bool value = true;
+};
+
+// 3.3 成员函数返回值检测
+// 用例：has_allocate_return_v<allocator<int>, int*>  // true
+template<typename T, typename ReturnType, typename = void>
+struct has_allocate_return {
+    static constexpr bool value = false;
+};
+
+template<typename T, typename ReturnType>
+struct has_allocate_return<T, ReturnType, typename void_t<
+    typename is_same<
+        decltype(T().allocate(std::size_t{})),
+        ReturnType
+    >::type
+>::type> {
+    static constexpr bool value = true;
+};
+
+// 4. 表达式检测系统
+// 4.1 表达式合法性检测
+// 用例：is_valid_expr_v<iterator>  // 检查是否支持++操作
+template<typename T, typename = void>
+struct is_valid_expr {
+    static constexpr bool value = false;
+};
+
+template<typename T>
+struct is_valid_expr<T, typename void_t<
+    decltype(T()++)
+>::type> {
+    static constexpr bool value = true;
+};
+
+// 4.2 表达式返回值检测
+// 用例：expr_return_type_v<iterator, iterator&>  // 检查++操作返回值类型
+template<typename T, typename ReturnType, typename = void>
+struct expr_return_type {
+    static constexpr bool value = false;
+};
+
+template<typename T, typename ReturnType>
+struct expr_return_type<T, ReturnType, typename void_t<
+    typename is_same<
+        decltype(T()++),
+        ReturnType
+    >::type
+>::type> {
+    static constexpr bool value = true;
+};
+
+// 5. 复合类型检测系统
+// 5.1 分配器类型检测
+// 用例：is_allocator_v<allocator<int>>  // true
+template<typename T>
+struct is_allocator {
+    static constexpr bool value = 
+        has_value_type<T>::value &&
+        has_allocate<T>::value;
+};
+
+// 5.2 迭代器类型检测
+// 用例：is_iterator_v<vector<int>::iterator>  // true
+template<typename T>
+struct is_iterator {
+    static constexpr bool value = 
+        has_value_type<T>::value &&
+        is_valid_expr<T>::value;
+};
+
+// 5.3 容器类型检测
+// 用例：is_container_v<vector<int>>  // true
+template<typename T>
+struct is_container {
+    static constexpr bool value = 
+        has_value_type<T>::value &&
+        has_value_type<T>::value;  // 这里需要修改为正确的检测
+};
+
+// 6. 类型别名系统
+// 6.1 类型检测别名
+// 用例：if constexpr (is_integral_v<T>) { ... }
+template<typename T>
+inline constexpr bool is_integral_v = is_integral<T>::value;
+
+template<typename T, typename U>
+inline constexpr bool is_same_v = is_same<T, U>::value;
+
+// 6.2 成员检测别名
+// 用例：if constexpr (has_value_type_v<T>) { ... }
+template<typename T>
+inline constexpr bool has_value_type_v = has_value_type<T>::value;
+
+template<typename T>
+inline constexpr bool has_allocate_v = has_allocate<T>::value;
+
+// 6.3 表达式检测别名
+// 用例：if constexpr (is_valid_expr_v<T>) { ... }
+template<typename T>
+inline constexpr bool is_valid_expr_v = is_valid_expr<T>::value;
+
+// 6.4 复合类型检测别名
+// 用例：if constexpr (is_allocator_v<T>) { ... }
+template<typename T>
+inline constexpr bool is_allocator_v = is_allocator<T>::value;
+
+template<typename T>
+inline constexpr bool is_iterator_v = is_iterator<T>::value;
+
+template<typename T>
+inline constexpr bool is_container_v = is_container<T>::value;
+
+// 7. 类型约束系统
+// 7.1 类型约束工具
+// 用例：enable_if_integral_t<T> foo(T x) { return x; }
+template<typename T>
+struct enable_if_integral {
+    using type = typename enable_if<is_integral<T>::value>::type;
+};
+
+// 7.2 成员约束工具
+// 用例：enable_if_has_value_type_t<T> foo(T x) { return x; }
+template<typename T>
+struct enable_if_has_value_type {
+    using type = typename enable_if<has_value_type<T>::value>::type;
+};
+
+// 8. 类型转换系统
+// 8.1 类型转换工具
+// 用例：remove_reference_t<int&> x = 42;  // x是int类型
+template<typename T>
+struct remove_reference {
+    using type = T;
+};
+
+template<typename T>
+struct remove_reference<T&> {
+    using type = T;
+};
+
+template<typename T>
+struct remove_reference<T&&> {
+    using type = T;
+};
+
+// 8.2 类型重绑定工具
+// 用例：rebind_t<allocator<int>, double>  // 得到allocator<double>
+template<typename T, typename U>
+struct rebind {
+    using type = U;
+};
+
+// 8.3 类型转换别名
+// 用例：remove_reference_t<int&> x = 42;
+template<typename T>
+using remove_reference_t = typename remove_reference<T>::type;
+
+template<typename T, typename U>
+using rebind_t = typename rebind<T, U>::type;
+
+// 9. 类型特征系统
+// 9.1 类型特征工具
+// 用例：is_trivial_v<int>  // true
+template<typename T>
+struct is_trivial {
+    static constexpr bool value = false;  // 需要实现
+};
+
+template<typename T>
+struct is_pod {
+    static constexpr bool value = false;  // 需要实现
+};
+
+// 9.2 类型特征别名
+// 用例：if constexpr (is_trivial_v<T>) { ... }
+template<typename T>
+inline constexpr bool is_trivial_v = is_trivial<T>::value;
+
+template<typename T>
+inline constexpr bool is_pod_v = is_pod<T>::value;
+
+// 10. 模式相关类型系统
+// 10.1 基础类型特征
+// 用例：base_traits<int, Mode::Safe>::pointer p;  // p是shared_ptr<int>
+template<typename T, Mode M = Mode::Safe>
+struct base_traits {
+    using value_type = T;
+    using pointer = std::conditional_t<M == Mode::Safe,
+        std::shared_ptr<T>,
+        T*
+    >;
+    using const_pointer = std::conditional_t<M == Mode::Safe,
+        std::shared_ptr<const T>,
+        const T*
+    >;
+    using reference = std::conditional_t<M == Mode::Safe,
+        std::shared_ptr<T>&,
+        T&
+    >;
+    using const_reference = std::conditional_t<M == Mode::Safe,
+        std::shared_ptr<const T>&,
+        const T&
+    >;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+    using iterator = std::conditional_t<M == Mode::Safe,
+        std::shared_ptr<T>,
+        T*
+    >;
+    using const_iterator = std::conditional_t<M == Mode::Safe,
+        std::shared_ptr<const T>,
+        const T*
+    >;
+    using reverse_iterator = std::conditional_t<M == Mode::Safe,
+        std::shared_ptr<T>,
+        T*
+    >;
+    using const_reverse_iterator = std::conditional_t<M == Mode::Safe,
+        std::shared_ptr<const T>,
+        const T*
+    >;
+
+    // 使用类型转换系统中的rebind
+    template<typename U>
+    using rebind = rebind_t<base_traits<T, M>, base_traits<U, M>>;
+};
+
+// 10.2 序列容器类型特征
+// 用例：sequence_traits<vector<int>>::iterator it;
+template<typename T, Mode M = Mode::Safe>
+struct sequence_traits : public base_traits<T, M> {
+    using base = base_traits<T, M>;
     using typename base::value_type;
-    using typename base::size_type;
-    using typename base::difference_type;
     using typename base::pointer;
     using typename base::const_pointer;
     using typename base::reference;
     using typename base::const_reference;
+    using typename base::size_type;
+    using typename base::difference_type;
     using typename base::iterator;
     using typename base::const_iterator;
     using typename base::reverse_iterator;
     using typename base::const_reverse_iterator;
+
+    // 使用基类的rebind
+    template<typename U>
+    using rebind = typename base::template rebind<U>;
 };
 
-// 分配器类型特征：继承自基础类型特征
-template<typename T, VectorMode Mode = VectorMode::Safe>
-struct allocator_traits : public base_traits<T, Mode> {
-    using base = base_traits<T, Mode>;
-    using base::value_type;
-    using base::pointer;
-    using base::const_pointer;
-    using base::reference;
-    using base::const_reference;
-    using base::size_type;
-    using base::difference_type;
-    using base::iterator;
-    using base::const_iterator;
-    using base::reverse_iterator;
-    using base::const_reverse_iterator;
+// 10.3 关联容器类型特征
+// 用例：associative_traits<map<int, string>>::iterator it;
+template<typename T, Mode M = Mode::Safe>
+struct associative_traits : public base_traits<T, M> {
+    using base = base_traits<T, M>;
+    using typename base::value_type;
+    using typename base::pointer;
+    using typename base::const_pointer;
+    using typename base::reference;
+    using typename base::const_reference;
+    using typename base::size_type;
+    using typename base::difference_type;
+    using typename base::iterator;
+    using typename base::const_iterator;
+    using typename base::reverse_iterator;
+    using typename base::const_reverse_iterator;
+
+    // 使用基类的rebind
+    template<typename U>
+    using rebind = typename base::template rebind<U>;
 };
 
-// 序列容器类型特征：继承自基础类型特征
-template<typename T, typename Allocator, VectorMode Mode = VectorMode::Safe>
-struct sequence_traits : public base_traits<T, Mode> {
-    using base = base_traits<T, Mode>;
-    using base::value_type;
-    using allocator_type = Allocator;  // 序列容器特有的分配器类型
-    using base::size_type;
-    using base::difference_type;
-    using base::pointer;
-    using base::const_pointer;
-    using base::reference;
-    using base::const_reference;
-    using base::iterator;
-    using base::const_iterator;
-    using base::reverse_iterator;
-    using base::const_reverse_iterator;
+// 11. 接口兼容性检查
+// 11.1 STL兼容性检查
+// 用例：if constexpr (is_stl_compatible_v<MyContainer>) { ... }
+template<typename T>
+struct is_stl_compatible {
+    static constexpr bool value = 
+        has_value_type<T>::value &&
+        has_allocate<T>::value;
 };
 
-// 关联容器类型特征
-template<typename Key, typename Value, typename Allocator, VectorMode Mode = VectorMode::Safe>
-struct associative_traits : public base_traits<std::pair<const Key, Value>, Mode> {
-    using base = base_traits<std::pair<const Key, Value>, Mode>;
-    using key_type = Key;  // 关联容器特有的键类型
-    using base::value_type;
-    using allocator_type = Allocator;
-    using base::size_type;
-    using base::difference_type;
-    using base::pointer;
-    using base::const_pointer;
-    using base::reference;
-    using base::const_reference;
-    using base::iterator;
-    using base::const_iterator;
-    using base::reverse_iterator;
-    using base::const_reverse_iterator;
+// 11.2 容器兼容性检查
+// 用例：if constexpr (is_container_compatible_v<MyContainer>) { ... }
+template<typename T>
+struct is_container_compatible {
+    static constexpr bool value = 
+        has_value_type<T>::value &&
+        has_allocate<T>::value &&
+        is_valid_expr<T>::value;
 };
 
-// CRTP类型继承基类：显式继承类型特征
-template<typename Derived, typename Traits>
-struct type_inherit : public Traits {
-    // 只做类型别名继承
+// 11.3 迭代器兼容性检查
+// 用例：if constexpr (is_iterator_compatible_v<MyIterator>) { ... }
+template<typename T>
+struct is_iterator_compatible {
+    static constexpr bool value = 
+        has_value_type<T>::value &&
+        is_valid_expr<T>::value;
 };
-
-// 类型别名：简化类型继承的使用
-template<typename T, VectorMode Mode = VectorMode::Safe>
-using base_type = type_inherit<T, base_traits<T, Mode>>;
-
-template<typename T, VectorMode Mode = VectorMode::Safe>
-using allocator_type = type_inherit<T, allocator_traits<T, Mode>>;
-
-template<typename T, typename Allocator, VectorMode Mode = VectorMode::Safe>
-using sequence_type = type_inherit<T, sequence_traits<T, Allocator, Mode>>;
-
-template<typename Key, typename Value, typename Allocator, VectorMode Mode = VectorMode::Safe>
-using associative_type = type_inherit<std::pair<const Key, Value>, associative_traits<Key, Value, Allocator, Mode>>;
 
 } // namespace Cat 

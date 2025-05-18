@@ -1,0 +1,180 @@
+<mxfile host="65bd71144e">
+    <diagram id="nri8KT6qhbfPUDUfg_2W" name="第 1 页">
+        <mxGraphModel dx="4170" dy="3143" grid="0" gridSize="10" guides="0" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" background="light-dark(#f1f3f4, #121212)" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="2" value="sizeof(T)*n&amp;gt;128" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-528" y="240" width="173" height="104" as="geometry"/>
+                </mxCell>
+                <mxCell id="15" style="edgeStyle=none;html=1;" edge="1" parent="1" source="3" target="2">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="&lt;font style=&quot;font-size: 16px;&quot;&gt;allocate&amp;lt;T&amp;gt;(n)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-522" y="79" width="158" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="16" value="&lt;span style=&quot;font-size: 16px;&quot;&gt;走系统调用&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-520" y="462" width="158" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="17" value="&lt;font style=&quot;font-size: 16px;&quot;&gt;&lt;span style=&quot;color: rgb(63, 63, 63);&quot;&gt;从空闲链表分配round_up(&lt;/span&gt;&lt;span style=&quot;font-size: 12px; color: rgb(0, 0, 0);&quot;&gt;sizeof(T)*n&lt;/span&gt;&lt;span style=&quot;color: rgb(63, 63, 63);&quot;&gt;)字节：&lt;/span&gt;&lt;br&gt;1）定位空闲链表：free_series[&lt;span style=&quot;color: rgb(0, 0, 0); font-size: 12px;&quot;&gt;sizeof(T)*n&lt;/span&gt;&lt;/font&gt;&lt;span style=&quot;font-size: 16px; background-color: transparent;&quot;&gt;]&lt;br&gt;&lt;br&gt;&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-165" y="238" width="328" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="23" value="" style="endArrow=classic;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="2" target="16">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="-387" y="369" as="sourcePoint"/>
+                        <mxPoint x="-286" y="374" as="targetPoint"/>
+                        <Array as="points"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="24" value="yes" style="edgeLabel;resizable=0;html=1;;align=center;verticalAlign=middle;" connectable="0" vertex="1" parent="23">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="26" value="no" style="endArrow=classic;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="2" target="17">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="-431" y="354" as="sourcePoint"/>
+                        <mxPoint x="-431" y="472" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="29" value="&lt;font style=&quot;font-size: 16px;&quot;&gt;free_series[&lt;span style=&quot;font-size: 12px; color: rgb(0, 0, 0);&quot;&gt;sizeof(T)*n&lt;/span&gt;&lt;/font&gt;&lt;span style=&quot;background-color: transparent; font-size: 16px;&quot;&gt;]是否为nullptr&lt;/span&gt;" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-107" y="392" width="208" height="126" as="geometry"/>
+                </mxCell>
+                <mxCell id="33" value="" style="endArrow=classic;html=1;" edge="1" parent="1" source="17">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="8" y="328" as="sourcePoint"/>
+                        <mxPoint x="-1" y="391" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="34" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="37" target="41">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="-102.5" y="248" as="sourcePoint"/>
+                        <mxPoint x="-66" y="427" as="targetPoint"/>
+                        <Array as="points"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="36" value="no" style="endArrow=classic;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="29" target="38">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="109" y="451" as="sourcePoint"/>
+                        <mxPoint x="291" y="442" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="38" value="&lt;span style=&quot;color: rgb(63, 63, 63); font-size: 16px;&quot;&gt;2）pop头节点&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="227" y="409" width="158" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="43" value="" style="whiteSpace=wrap;html=1;aspect=fixed;" vertex="1" parent="1">
+                    <mxGeometry x="-348" y="612" width="664" height="664" as="geometry"/>
+                </mxCell>
+                <mxCell id="39" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.524;entryY=-0.001;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="29" target="43">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="-3" y="518" as="sourcePoint"/>
+                        <mxPoint x="2" y="659" as="targetPoint"/>
+                        <Array as="points"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="40" value="yes" style="edgeLabel;resizable=0;html=1;;align=center;verticalAlign=middle;" connectable="0" vertex="1" parent="39">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="48" style="edgeStyle=none;html=1;" edge="1" parent="1" source="37" target="41">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="37" value="&lt;font color=&quot;#3f848d&quot;&gt;1）分层设计：向内存池或系统申请20个round_uo(&lt;span style=&quot;color: rgb(63, 132, 141);&quot;&gt;sizeof(T)*n&lt;/span&gt;)的连续内存：chunk_alloc(round_up(sizeof(T)*n), 20)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-228" y="700" width="430" height="63" as="geometry"/>
+                </mxCell>
+                <mxCell id="41" value="&lt;p&gt;&lt;font face=&quot;Helvetica&quot;&gt;将返回的连续内存(char* chunk)组织成链表，返回头节点，其余挂到free_series:&lt;br&gt;&lt;/font&gt;&lt;/p&gt;&lt;p&gt;&lt;font face=&quot;Helvetica&quot;&gt;1）拿到要挂到的空闲链表头指针：&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(211, 182, 146);&quot;&gt;free_list_node&lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;*&lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(211, 182, 146);&quot;&gt; my_free_list &lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;=&lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(211, 182, 146);&quot;&gt; free_serial&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211); font-size: 16px; white-space: pre;&quot;&gt;[&lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(63, 132, 141);&quot;&gt;get_free_serial_index&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211); font-size: 16px; white-space: pre;&quot;&gt;(&lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(211, 182, 146);&quot;&gt;node_size&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211); font-size: 16px; white-space: pre;&quot;&gt;)]&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211); font-size: 16px; white-space: pre; font-weight: bold;&quot;&gt;;&lt;br&gt;&lt;/span&gt;&lt;/font&gt;&lt;/p&gt;&lt;p&gt;&lt;font face=&quot;Helvetica&quot;&gt;2）用双指针循环组织链表：以每node_size间隔内存写一个指向下一个node的地址：&lt;br&gt;&lt;/font&gt;&lt;font face=&quot;Helvetica&quot;&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt;free_list_node&lt;/span&gt;&lt;span style=&quot;color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;*&lt;/span&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt; current_node &lt;/span&gt;&lt;span style=&quot;color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;=&lt;/span&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt; &lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211);&quot;&gt;(&lt;/span&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt;free_list_node&lt;/span&gt;&lt;span style=&quot;color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;*&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211);&quot;&gt;)((&lt;/span&gt;&lt;span style=&quot;color: rgb(190, 133, 111); font-style: italic;&quot;&gt;char&lt;/span&gt;&lt;span style=&quot;color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;*&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211);&quot;&gt;)&lt;/span&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt;chunk &lt;/span&gt;&lt;span style=&quot;color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;+&lt;/span&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt; node_size&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211);&quot;&gt;)&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211); font-weight: bold;&quot;&gt;;&lt;br&gt;&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;Helvetica&quot;&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt;&amp;nbsp; &amp;nbsp; free_list_node&lt;/span&gt;&lt;span style=&quot;color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;*&lt;/span&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt; next_node &lt;/span&gt;&lt;span style=&quot;color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;=&lt;/span&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt; &lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211);&quot;&gt;(&lt;/span&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt;free_list_node&lt;/span&gt;&lt;span style=&quot;color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;*&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211);&quot;&gt;)((&lt;/span&gt;&lt;span style=&quot;color: rgb(190, 133, 111); font-style: italic;&quot;&gt;char&lt;/span&gt;&lt;span style=&quot;color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;*&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211);&quot;&gt;)&lt;/span&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt;current_node &lt;/span&gt;&lt;span style=&quot;color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;+&lt;/span&gt;&lt;span style=&quot;color: rgb(211, 182, 146);&quot;&gt; node_size&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211);&quot;&gt;)&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211); font-weight: bold;&quot;&gt;;&lt;/span&gt;&lt;/font&gt;&lt;/p&gt;&lt;p&gt;&lt;/p&gt;&lt;p&gt;&lt;font face=&quot;Helvetica&quot;&gt;3)pop头节点&lt;/font&gt;&lt;/p&gt;&lt;p&gt;&lt;/p&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;" vertex="1" parent="1">
+                    <mxGeometry x="-336" y="857" width="655" height="188" as="geometry"/>
+                </mxCell>
+                <mxCell id="44" value="&lt;h2&gt;&lt;span style=&quot;font-size: 16px; color: rgb(63, 63, 63);&quot;&gt;给空闲链表free_series[&lt;span style=&quot;font-size: 12px; color: rgb(0, 0, 0);&quot;&gt;sizeof(T)*n&lt;/span&gt;&lt;span style=&quot;background-color: transparent;&quot;&gt;]&lt;/span&gt;填充20个round_up(&lt;/span&gt;&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;sizeof(T)*n&lt;/span&gt;&lt;span style=&quot;font-size: 16px; color: rgb(63, 63, 63);&quot;&gt;)字节，再返回头节点：refill(&lt;span style=&quot;color: rgb(63, 63, 63);&quot;&gt;round_up(&lt;/span&gt;&lt;span style=&quot;font-size: 12px; color: rgb(0, 0, 0);&quot;&gt;sizeof(T)*n&lt;/span&gt;&lt;span style=&quot;color: rgb(63, 63, 63);&quot;&gt;), 20&lt;/span&gt;)&lt;/span&gt;&lt;/h2&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="-257" y="605" width="493" height="81" as="geometry"/>
+                </mxCell>
+                <mxCell id="50" value="" style="whiteSpace=wrap;html=1;aspect=fixed;" vertex="1" parent="1">
+                    <mxGeometry x="511" y="314" width="1746" height="1746" as="geometry"/>
+                </mxCell>
+                <mxCell id="51" value="&lt;span style=&quot;color: rgb(63, 132, 141);&quot;&gt;chunk_alloc(round_up(sizeof(T)*n), 20)&lt;/span&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="889" y="316" width="886" height="236" as="geometry"/>
+                </mxCell>
+                <mxCell id="52" value="" style="endArrow=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="37" target="50">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="458" y="900" as="sourcePoint"/>
+                        <mxPoint x="508" y="850" as="targetPoint"/>
+                        <Array as="points"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="59" style="edgeStyle=none;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="53" target="56">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="60" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="53" target="57">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="53" value="先计算内存池大小" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="546" y="934" width="115" height="62" as="geometry"/>
+                </mxCell>
+                <mxCell id="68" style="edgeStyle=none;html=1;" edge="1" parent="1" source="54" target="67">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="54" value="&lt;p&gt;&lt;font face=&quot;Helvetica&quot;&gt;将内存池剩余内存挂到对应空闲链表:&lt;br&gt;1)每次分配的内存node_size=&lt;span style=&quot;font-size: 16px;&quot;&gt;r&lt;/span&gt;&lt;span style=&quot;color: rgb(63, 132, 141);&quot;&gt;ound_up(....)都是8的倍数&lt;/span&gt;，剩余内存对应的空闲链表：&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(211, 182, 146);&quot;&gt;free_list_node&lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;*&lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(211, 182, 146);&quot;&gt; my_free_list &lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(200, 141, 162); font-weight: bold;&quot;&gt;=&lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(211, 182, 146);&quot;&gt; free_serial&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211); font-size: 16px; white-space: pre;&quot;&gt;[&lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(63, 132, 141);&quot;&gt;get_free_serial_index&lt;/span&gt;&lt;span style=&quot;color: rgb(197, 205, 211); font-size: 16px; white-space: pre;&quot;&gt;(&lt;/span&gt;&lt;span style=&quot;font-size: 16px; white-space: pre; color: rgb(211, 182, 146);&quot;&gt;bytes_left&lt;/span&gt;&lt;/font&gt;&lt;span style=&quot;color: rgb(197, 205, 211); font-size: 16px; white-space: pre;&quot;&gt;&lt;font face=&quot;Helvetica&quot;&gt;)]&lt;br&gt;2）在内存池头节点写下地址，指向对应空闲链表头，再注册为新的空闲链表头&lt;/font&gt;&lt;/span&gt;&lt;br&gt;&lt;/p&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="990" y="1150" width="750" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="63" style="edgeStyle=none;html=1;" edge="1" parent="1" source="55" target="62">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="55" value="&lt;span style=&quot;font-size: 16px;&quot;&gt;&amp;gt;r&lt;/span&gt;&lt;span style=&quot;color: rgb(63, 132, 141);&quot;&gt;ound_up(sizeof(T)*n)*20&lt;/span&gt;" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="632" y="703" width="180" height="97" as="geometry"/>
+                </mxCell>
+                <mxCell id="64" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="56" target="61">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="56" value="&lt;span style=&quot;font-size: 16px;&quot;&gt;&amp;gt;=r&lt;/span&gt;&lt;span style=&quot;color: rgb(63, 132, 141);&quot;&gt;ound_up(sizeof(T)*n)&lt;/span&gt;" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="682" y="924" width="180" height="97" as="geometry"/>
+                </mxCell>
+                <mxCell id="65" style="edgeStyle=none;html=1;" edge="1" parent="1" source="57" target="54">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="57" value="&lt;span style=&quot;font-size: 16px;&quot;&gt;&amp;lt;r&lt;/span&gt;&lt;span style=&quot;color: rgb(63, 132, 141);&quot;&gt;ound_up(sizeof(T)*n):一个node都分配不了&lt;/span&gt;" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="635" y="1135" width="286" height="97" as="geometry"/>
+                </mxCell>
+                <mxCell id="58" style="edgeStyle=none;html=1;entryX=0.022;entryY=0.443;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="53" target="55">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="61" value="至少有一个node可以返回" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="949" y="937" width="196" height="75" as="geometry"/>
+                </mxCell>
+                <mxCell id="62" value="返回内存池连续空闲内存的头指针" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="900" y="708" width="243" height="75" as="geometry"/>
+                </mxCell>
+                <mxCell id="70" style="edgeStyle=none;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="67" target="69">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="67" value="&lt;p&gt;扩容：系统调用&lt;/p&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="1268" y="1367" width="178" height="82" as="geometry"/>
+                </mxCell>
+                <mxCell id="77" style="edgeStyle=none;html=1;" edge="1" parent="1" source="69" target="75">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="80" value="n" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="77">
+                    <mxGeometry x="0.0364" y="-1" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="78" style="edgeStyle=none;html=1;" edge="1" parent="1" source="69" target="76">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="79" value="y" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="78">
+                    <mxGeometry x="-0.3496" y="3" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="69" value="&lt;span style=&quot;font-size: 16px;&quot;&gt;系统内存不足&lt;/span&gt;" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="1210" y="1530" width="286" height="97" as="geometry"/>
+                </mxCell>
+                <mxCell id="75" value="&lt;p&gt;更新内存池状态，&lt;span style=&quot;background-color: transparent; color: rgb(63, 132, 141);&quot;&gt;向内存池或系统申请20个round_uo(&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: rgb(63, 132, 141);&quot;&gt;sizeof(T)*n&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: rgb(63, 132, 141);&quot;&gt;)的连续内存返回&lt;/span&gt;&lt;/p&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="1729" y="1519" width="485" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="81" style="edgeStyle=none;html=1;" edge="1" parent="1" source="76" target="75">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="76" value="&lt;p&gt;回收&amp;gt;&lt;span style=&quot;background-color: transparent; color: rgb(63, 132, 141);&quot;&gt;round_uo(&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: rgb(63, 132, 141);&quot;&gt;sizeof(T)*n&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: rgb(63, 132, 141);&quot;&gt;)的&lt;/span&gt;&lt;span style=&quot;background-color: transparent;&quot;&gt;空闲链表补充内存池，每回收一个空闲链表尝试&lt;/span&gt;&lt;/p&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="979" y="1699" width="750" height="120" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

@@ -34,3 +34,5 @@
 ./doc
 ./build
 ./vscode
+./cache
+.cursor

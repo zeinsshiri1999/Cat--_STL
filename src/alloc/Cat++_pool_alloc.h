@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <type_traits>
-//线程安全
+//线程安全由外部保证，分配器本身不保证线程安全
 //尽量兼容STL接口规范
 //异常处理
 /*
@@ -27,7 +27,7 @@ union free_list_node {
     char client_data[1];        // 当块分配出去时，作为一个灵活数组类型供用户使用
 };
 
-template<bool threads>
+// 内存池状态维护实体类
 class alloc_pool final {
 private:
     // 禁止实例化、拷贝和移动
@@ -43,11 +43,15 @@ private:
     static constexpr size_t MAX_BYTES = 128;                 // 小块大小上限
     static constexpr size_t NUM_OF_NODES = MAX_BYTES / ALIGN;// 空闲数组节点数量(128/8)
 
+    // 类型别名：未来可能会改变的类型
+    using node_ptr = free_list_node*;                        // 节点指针类型
+    using raw_ptr = char*;                                   // 原始内存指针类型
+
     // 内存池状态
-    static inline char* start = nullptr;                     // 内存池起始位置
-    static inline char* end = nullptr;                       // 内存池结束位置
+    static inline raw_ptr start = nullptr;                   // 内存池起始位置
+    static inline raw_ptr end = nullptr;                     // 内存池结束位置
     static inline size_t size = 0;                           // 内存池大小
-    static inline free_list_node* free_serial[NUM_OF_NODES] = {nullptr}; // 空闲链表数组
+    static inline node_ptr free_serial[NUM_OF_NODES] = {nullptr}; // 空闲链表数组
 
 public:
     // pool配置访问接口
@@ -56,35 +60,37 @@ public:
     static constexpr size_t get_num_of_nodes() { return NUM_OF_NODES; }
 
     // pool状态访问接口
-    static char* get_start() { return start; }
-    static void set_start(char* ptr) { start = ptr; }
-    static char* get_end() { return end; }
-    static void set_end(char* ptr) { end = ptr; }
+    static raw_ptr get_start() { return start; }
+    static void set_start(raw_ptr ptr) { start = ptr; }
+    static raw_ptr get_end() { return end; }
+    static void set_end(raw_ptr ptr) { end = ptr; }
     static size_t get_size() { return size; }
     static void set_size(size_t new_size) { size = new_size; }
     
     // 空闲链表操作接口
-    static free_list_node* get_free_list(size_t index) { return free_serial[index]; }
-    static void set_free_list(size_t index, free_list_node* node) { free_serial[index] = node; }
+    static node_ptr get_free_list(size_t index) { return free_serial[index]; }
+    static void set_free_list(size_t index, node_ptr node) { free_serial[index] = node; }
 };
 
-// 定义具体的别名
-using pool_t = alloc_pool<true>;   // 线程安全版本
-using pool_f = alloc_pool<false>;  // 非线程安全版本
-
 // 内存池分配器类
-template<bool threads, typename T>
-class pool_allocator : public allocator<threads, T> {
+// 线程安全由外部保证，分配器本身不保证线程安全
+template<typename T, VectorMode Mode = VectorMode::Safe>
+class pool_allocator : public allocator_interface<pool_allocator<T, Mode>, T, Mode> {
 private:
-    //继承类型
-    using traits = allocator<threads, T>;
-    IMPORT_ALLOCATOR_TYPES(traits);
+    // 只使用受模式影响的类型
+    using pointer = typename allocator_traits<T, Mode>::pointer;
+    using const_pointer = typename allocator_traits<T, Mode>::const_pointer;
+    using reference = typename allocator_traits<T, Mode>::reference;
+    using const_reference = typename allocator_traits<T, Mode>::const_reference;
+    using iterator = typename allocator_traits<T, Mode>::iterator;
+    using const_iterator = typename allocator_traits<T, Mode>::const_iterator;
+    using reverse_iterator = typename allocator_traits<T, Mode>::reverse_iterator;
+    using const_reverse_iterator = typename allocator_traits<T, Mode>::const_reverse_iterator;
 
-    // 内存池访问别名,内存池是公有的，所以不继承一份这些数据
-    using pool = typename std::conditional<threads, pool_t, pool_f>::type;
+    using pool = alloc_pool;
     
     /*
-     * 内存对齐计算：
+     * 获取空闲链表对应索引：
      * 1. 未对齐情况：bytes = k * ALIGN + remainder
      *    计算：(bytes + ALIGN - 1) / ALIGN - 1
      *    结果：k
@@ -121,20 +127,20 @@ private:
 public:
     template<typename U>
     struct rebind {
-        using other = pool_allocator<threads, U>;
+        using other = pool_allocator<U, Mode>;
     };
 
     // 构造函数和析构函数
     pool_allocator() noexcept = default;
     template<typename U>
-    pool_allocator(const pool_allocator<threads, U>&) noexcept {}
-    ~pool_allocator() noexcept override = default;
+    pool_allocator(const pool_allocator<U, Mode>&) noexcept {}
+    ~pool_allocator() noexcept = default;
 
 public:
     // 内存分配：优先使用内存池，大块内存直接使用malloc
-    T* allocate(size_t n) override {
+    pointer allocate(std::size_t n) {
         if(n * sizeof(T) > pool::get_max_bytes()) {
-            T* result = static_cast<T*>(malloc(n * sizeof(T)));
+            pointer result = static_cast<pointer>(malloc(n * sizeof(T)));
             if (!result) {
                 throw std::bad_alloc();
             }
@@ -144,18 +150,18 @@ public:
         free_list_node* block = pool::get_free_list(get_free_serial_index(n * sizeof(T)));
         if(block) {
             pool::set_free_list(get_free_serial_index(n * sizeof(T)), block->block);
-            return reinterpret_cast<T*>(block);
+            return reinterpret_cast<pointer>(block);
         }
 
         void* result = refill(round_up(n * sizeof(T)));
         if (!result) {
             throw std::bad_alloc();
         }
-        return static_cast<T*>(result);
+        return static_cast<pointer>(result);
     }
 
     // 内存释放：优先使用内存池，大块内存直接使用free
-    void deallocate(T* ptr, size_t n) noexcept override {
+    void deallocate(pointer ptr, std::size_t n) noexcept {
         if(n * sizeof(T) > pool::get_max_bytes()) {
             free(ptr);
             return;
@@ -169,29 +175,29 @@ public:
     }
 
     // 内存重分配：优先使用内存池，大块内存直接使用realloc
-    T* reallocate(T* ptr, size_t old_size, size_t new_size) override {
+    pointer reallocate(pointer ptr, std::size_t old_size, std::size_t new_size) {
         if(old_size * sizeof(T) > pool::get_max_bytes() && new_size * sizeof(T) > pool::get_max_bytes()) {
-            return static_cast<T*>(realloc(ptr, new_size * sizeof(T)));
+            return static_cast<pointer>(realloc(ptr, new_size * sizeof(T)));
         }
         if(round_up(old_size * sizeof(T)) == round_up(new_size * sizeof(T))) {
             return ptr;
         }
 
-        T* result = allocate(new_size);
+        pointer result = allocate(new_size);
         size_t copy_sz = new_size > old_size ? old_size : new_size;
         memcpy(result, ptr, copy_sz * sizeof(T));
         deallocate(ptr, old_size);
         return result;
     }
 
-    size_t max_size() const noexcept override {
-        return size_t(-1) / sizeof(T);
+    std::size_t max_size() const noexcept {
+        return std::size_t(-1) / sizeof(T);
     }
 };
 
 // 实现refill和chunk_alloc方法
-template<bool threads, typename T>
-void* pool_allocator<threads, T>::refill(size_t node_size, const size_t& nodes) {
+template<typename T, VectorMode Mode>
+void* pool_allocator<T, Mode>::refill(size_t node_size, const size_t& nodes) {
     unsigned int nobjs = nodes;
     char* chunk = chunk_alloc(node_size, nobjs);
     if (!chunk) {
@@ -233,8 +239,8 @@ void* pool_allocator<threads, T>::refill(size_t node_size, const size_t& nodes) 
     return chunk;
 }
 
-template<bool threads, typename T>
-char* pool_allocator<threads, T>::chunk_alloc(size_t node_size, unsigned int& nodes) {
+template<typename T, VectorMode Mode>
+char* pool_allocator<T, Mode>::chunk_alloc(size_t node_size, unsigned int& nodes) {
     char* result;
     size_t need_bytes = node_size * nodes;
     size_t bytes_left = pool::get_end() - pool::get_start();
@@ -280,14 +286,6 @@ char* pool_allocator<threads, T>::chunk_alloc(size_t node_size, unsigned int& no
         return chunk_alloc(node_size, nodes);
     }
 }
-
-// 显式实例化
-template class pool_allocator<true, int>;
-template class pool_allocator<false, int>;
-
-// 显式实例化非模板类
-template class alloc_pool<true>;
-template class alloc_pool<false>;
 
 } // namespace Cat
 
